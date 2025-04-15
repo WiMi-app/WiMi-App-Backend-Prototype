@@ -48,6 +48,9 @@ class UserWithStats(User):
     posts_count: int = 0
     followers_count: int = 0
     following_count: int = 0
+    created_challenges_count: int = 0
+    joined_challenges_count: int = 0
+    achievements_count: int = 0
 
     class Config:
         from_attributes = True 

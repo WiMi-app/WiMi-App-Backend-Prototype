@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, List
+from typing import Any, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -79,11 +79,23 @@ def get_user_by_username(
     # Get following count
     following_count = db.table("follows").select("id", count="exact").eq("follower_id", user["id"]).execute()
     
+    # Get created challenges count
+    created_challenges_count = db.table("challenges").select("id", count="exact").eq("creator_id", user["id"]).execute()
+    
+    # Get joined challenges count
+    joined_challenges_count = db.table("challenge_participants").select("challenge_id", count="exact").eq("user_id", user["id"]).execute()
+    
+    # Get achievements count
+    achievements_count = db.table("challenge_achievements").select("id", count="exact").eq("user_id", user["id"]).execute()
+    
     user_with_stats = {
         **user,
         "posts_count": posts_count.count if hasattr(posts_count, 'count') else 0,
         "followers_count": followers_count.count if hasattr(followers_count, 'count') else 0,
         "following_count": following_count.count if hasattr(following_count, 'count') else 0,
+        "created_challenges_count": created_challenges_count.count if hasattr(created_challenges_count, 'count') else 0,
+        "joined_challenges_count": joined_challenges_count.count if hasattr(joined_challenges_count, 'count') else 0,
+        "achievements_count": achievements_count.count if hasattr(achievements_count, 'count') else 0,
     }
     
     return UserWithStats(**user_with_stats)
@@ -199,14 +211,203 @@ def unfollow_user(
     if not follow.data or len(follow.data) == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Not following this user",
+            detail="You are not following this user",
         )
     
-    # Delete follow
+    # Delete follow record
     db.table("follows") \
         .delete() \
         .eq("follower_id", str(current_user.id)) \
         .eq("followed_id", str(user_id)) \
         .execute()
     
-    return {"status": "success", "message": "User unfollowed successfully"} 
+    return {"message": "Successfully unfollowed user"}
+
+
+@router.get("/{username}/created-challenges", response_model=List[dict])
+def get_user_created_challenges(
+    username: str,
+    skip: int = 0,
+    limit: int = 10,
+    db: Client = Depends(get_supabase),
+    current_user: Optional[User] = Depends(get_current_active_user),
+) -> Any:
+    """
+    Get challenges created by a specific user.
+    """
+    user_data = db.table("users").select("*").eq("username", username).execute()
+    
+    if not user_data.data or len(user_data.data) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with username {username} not found",
+        )
+    
+    user = user_data.data[0]
+    
+    # Get challenges created by the user
+    challenges = db.table("challenges") \
+        .select("*") \
+        .eq("creator_id", user["id"]) \
+        .order("created_at", desc=True) \
+        .range(skip, skip + limit - 1) \
+        .execute()
+    
+    if not challenges.data:
+        return []
+    
+    result = []
+    
+    for challenge in challenges.data:
+        # Skip private challenges if current user is not the creator
+        if challenge["is_private"] and (not current_user or str(current_user.id) != challenge["creator_id"]):
+            # Unless they're a participant
+            if current_user:
+                participant = db.table("challenge_participants") \
+                    .select("*") \
+                    .eq("challenge_id", challenge["id"]) \
+                    .eq("user_id", str(current_user.id)) \
+                    .execute()
+                
+                if not participant.data or len(participant.data) == 0:
+                    continue
+            else:
+                continue
+        
+        # Get participants count
+        participants_count = db.table("challenge_participants") \
+            .select("user_id", count="exact") \
+            .eq("challenge_id", challenge["id"]) \
+            .execute()
+        
+        # Get posts count
+        posts_count = db.table("challenge_posts") \
+            .select("post_id", count="exact") \
+            .eq("challenge_id", challenge["id"]) \
+            .execute()
+        
+        # Check if current user is joined
+        is_joined = False
+        if current_user:
+            joined = db.table("challenge_participants") \
+                .select("*") \
+                .eq("challenge_id", challenge["id"]) \
+                .eq("user_id", str(current_user.id)) \
+                .execute()
+            
+            is_joined = joined.data and len(joined.data) > 0
+        
+        challenge_with_details = {
+            **challenge,
+            "creator": user,
+            "participant_count": participants_count.count if hasattr(participants_count, 'count') else 0,
+            "posts_count": posts_count.count if hasattr(posts_count, 'count') else 0,
+            "is_joined": is_joined,
+        }
+        
+        result.append(challenge_with_details)
+    
+    return result
+
+
+@router.get("/{username}/joined-challenges", response_model=List[dict])
+def get_user_joined_challenges(
+    username: str,
+    skip: int = 0,
+    limit: int = 10,
+    db: Client = Depends(get_supabase),
+    current_user: Optional[User] = Depends(get_current_active_user),
+) -> Any:
+    """
+    Get challenges joined by a specific user.
+    """
+    user_data = db.table("users").select("*").eq("username", username).execute()
+    
+    if not user_data.data or len(user_data.data) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with username {username} not found",
+        )
+    
+    user = user_data.data[0]
+    
+    # Get challenge participations for the user
+    participations = db.table("challenge_participants") \
+        .select("*") \
+        .eq("user_id", user["id"]) \
+        .order("joined_at", desc=True) \
+        .range(skip, skip + limit - 1) \
+        .execute()
+    
+    if not participations.data:
+        return []
+    
+    result = []
+    challenge_ids = [p["challenge_id"] for p in participations.data]
+    
+    for challenge_id in challenge_ids:
+        # Get challenge data
+        challenge_data = db.table("challenges").select("*").eq("id", challenge_id).execute()
+        
+        if not challenge_data.data or len(challenge_data.data) == 0:
+            continue
+        
+        challenge = challenge_data.data[0]
+        
+        # Skip private challenges if current user is not the creator
+        if challenge["is_private"] and (not current_user or str(current_user.id) != challenge["creator_id"]):
+            # Unless they're a participant
+            if current_user:
+                participant = db.table("challenge_participants") \
+                    .select("*") \
+                    .eq("challenge_id", challenge["id"]) \
+                    .eq("user_id", str(current_user.id)) \
+                    .execute()
+                
+                if not participant.data or len(participant.data) == 0:
+                    continue
+            else:
+                continue
+        
+        # Get creator data
+        creator_data = db.table("users").select("*").eq("id", challenge["creator_id"]).execute()
+        
+        if creator_data.data and len(creator_data.data) > 0:
+            creator = creator_data.data[0]
+        else:
+            creator = None
+        
+        # Get participants count
+        participants_count = db.table("challenge_participants") \
+            .select("user_id", count="exact") \
+            .eq("challenge_id", challenge["id"]) \
+            .execute()
+        
+        # Get posts count
+        posts_count = db.table("challenge_posts") \
+            .select("post_id", count="exact") \
+            .eq("challenge_id", challenge["id"]) \
+            .execute()
+        
+        # Check if current user is joined
+        is_joined = False
+        if current_user:
+            joined = db.table("challenge_participants") \
+                .select("*") \
+                .eq("challenge_id", challenge["id"]) \
+                .eq("user_id", str(current_user.id)) \
+                .execute()
+            
+            is_joined = joined.data and len(joined.data) > 0
+        
+        challenge_with_details = {
+            **challenge,
+            "creator": creator,
+            "participant_count": participants_count.count if hasattr(participants_count, 'count') else 0,
+            "posts_count": posts_count.count if hasattr(posts_count, 'count') else 0,
+            "is_joined": is_joined,
+        }
+        
+        result.append(challenge_with_details)
+    
+    return result 

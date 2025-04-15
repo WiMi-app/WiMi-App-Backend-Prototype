@@ -75,6 +75,7 @@ def get_posts(
     limit: int = 10,
     user_id: Optional[UUID] = None,
     hashtag: Optional[str] = None,
+    challenge_id: Optional[UUID] = None,
     db: Client = Depends(get_supabase),
 ) -> Any:
     """
@@ -102,6 +103,16 @@ def get_posts(
                 return []
         else:
             return []
+    
+    if challenge_id:
+        # Filter posts by challenge
+        challenge_posts = db.table("challenge_posts").select("post_id").eq("challenge_id", str(challenge_id)).execute()
+        
+        if not challenge_posts.data or len(challenge_posts.data) == 0:
+            return []
+        
+        post_ids = [cp["post_id"] for cp in challenge_posts.data]
+        query = query.in_("id", post_ids)
     
     posts = query.range(skip, skip + limit - 1).execute()
     
@@ -140,12 +151,36 @@ def get_posts(
             if hashtags_data.data:
                 hashtags = hashtags_data.data
         
+        # Get challenge information if applicable
+        challenge_info = None
+        if challenge_id:
+            challenge_post = db.table("challenge_posts") \
+                .select("*") \
+                .eq("challenge_id", str(challenge_id)) \
+                .eq("post_id", post["id"]) \
+                .execute()
+            
+            if challenge_post.data and len(challenge_post.data) > 0:
+                challenge_post_data = challenge_post.data[0]
+                
+                challenge_data = db.table("challenges") \
+                    .select("*") \
+                    .eq("id", challenge_post_data["challenge_id"]) \
+                    .execute()
+                
+                if challenge_data.data and len(challenge_data.data) > 0:
+                    challenge_info = {
+                        "challenge": challenge_data.data[0],
+                        "challenge_post_details": challenge_post_data
+                    }
+        
         post_with_details = {
             **post,
             "user": user,
             "comments_count": comments_count.count if hasattr(comments_count, 'count') else 0,
             "likes_count": likes_count.count if hasattr(likes_count, 'count') else 0,
             "hashtags": hashtags,
+            "challenge_info": challenge_info
         }
         
         result.append(post_with_details)
