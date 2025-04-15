@@ -1,0 +1,16 @@
+.git
+.gitignore
+.env
+.env.*
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.log
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo 
