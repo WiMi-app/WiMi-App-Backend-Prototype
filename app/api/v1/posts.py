@@ -327,6 +327,9 @@ def delete_post(
     
     # Delete related entities first (to maintain referential integrity)
     
+    # Delete challenge post associations
+    db.table("challenge_posts").delete().eq("post_id", str(post_id)).execute()
+    
     # Delete likes
     db.table("likes").delete().eq("post_id", str(post_id)).execute()
     

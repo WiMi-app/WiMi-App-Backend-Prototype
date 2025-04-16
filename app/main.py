@@ -8,7 +8,7 @@ from app.core.config import settings
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="Social Media Backend API built with FastAPI and Supabase",
+    description="WiMi Backend API built with FastAPI and Supabase",
     docs_url="/docs",
     redoc_url="/redoc",
 )

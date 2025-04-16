@@ -22,12 +22,13 @@ def login_access_token(
 ) -> Any:
     """
     OAuth2 compatible token login, get an access token for future requests.
+    You can use either email or username for authentication.
     """
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect email/username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
@@ -37,14 +38,14 @@ def login_access_token(
     )
     
     # Update last login time
-    now = datetime.now(datetime.UTC).isoformat()
+    now = datetime.now().isoformat()
     db.table("users").update({"last_login": now}).eq("id", str(user.id)).execute()
     
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "user_id": user.id,
-        "expires": datetime.utcnow() + access_token_expires,
+        "expires": datetime.now() + access_token_expires,
     }
 
 
@@ -70,14 +71,14 @@ def login_email(
     )
     
     # Update last login time
-    now = datetime.now(datetime.UTC).isoformat()
+    now = datetime.now().isoformat()
     db.table("users").update({"last_login": now}).eq("id", str(user.id)).execute()
     
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "user_id": user.id,
-        "expires": datetime.utcnow() + access_token_expires,
+        "expires": datetime.now() + access_token_expires,
     }
 
 
@@ -108,11 +109,12 @@ def register_user(
     # Hash the password
     hashed_password = get_password_hash(user_data.password)
     
-    # Create user dict for insertion
-    now = datetime.now(datetime.UTC).isoformat()
-    user_dict = user_data.model_dump(exclude={"password"})
+    # Create user dict for insertion using the safe method
+    now = datetime.now().isoformat()
+    user_dict = user_data.model_dump_json_safe()
+    
     user_dict.update({
-        "password": hashed_password,
+        "password_hash": hashed_password,
         "created_at": now,
         "updated_at": now,
     })

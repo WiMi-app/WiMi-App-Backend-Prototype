@@ -10,6 +10,7 @@ from app.db.database import get_supabase
 from app.schemas.users import User, UserUpdate, UserWithStats
 from app.schemas.posts import Post
 from app.schemas.follows import Follow, FollowCreate
+from app.core.security import get_password_hash
 
 router = APIRouter()
 
@@ -33,13 +34,22 @@ def update_user_me(
     """
     Update own user information.
     """
-    current_data = current_user.dict()
-    update_data = user_update.dict(exclude_unset=True)
+    current_data = current_user.model_dump()
+    update_data = user_update.model_dump_json_safe()
     
     if not update_data:
         return current_user
     
-    update_data["updated_at"] = datetime.utcnow().isoformat()
+    # Handle password update separately
+    if "password" in update_data and update_data["password"]:
+        # Hash the new password
+        password_hash = get_password_hash(update_data["password"])
+        # Replace password with password_hash in the update data
+        update_data["password_hash"] = password_hash
+        # Remove the plain password from update data
+        del update_data["password"]
+    
+    update_data["updated_at"] = datetime.now().isoformat()
     
     result = db.table("users").update(update_data).eq("id", str(current_user.id)).execute()
     
@@ -163,7 +173,7 @@ def follow_user(
         )
     
     # Create follow record
-    now = datetime.utcnow().isoformat()
+    now = datetime.now().isoformat()
     follow_dict = {
         "follower_id": str(current_user.id),
         "followed_id": str(follow_data.followed_id),

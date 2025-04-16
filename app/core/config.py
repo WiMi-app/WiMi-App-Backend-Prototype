@@ -24,7 +24,7 @@ class Settings(BaseSettings):
         "http://localhost",
         "http://localhost:3000",
         "http://localhost:8000",
-        "https://wimi-social.vercel.app",
+        # "https://wimi-app.vercel.app",
     ]
     
     class Config:

@@ -54,15 +54,20 @@ def get_current_active_user(current_user: User = Depends(get_current_user)) -> U
     return current_user
 
 
-def authenticate_user(db: Client, email: str, password: str) -> Optional[User]:
-    user_data = db.table("users").select("*").eq("email", email).execute()
+def authenticate_user(db: Client, email_or_username: str, password: str) -> Optional[User]:
+    # Try to find user by email first
+    user_data = db.table("users").select("*").eq("email", email_or_username).execute()
+    
+    # If not found by email, try with username
+    if user_data.data is None or len(user_data.data) == 0:
+        user_data = db.table("users").select("*").eq("username", email_or_username).execute()
     
     if user_data.data is None or len(user_data.data) == 0:
         return None
         
     user = user_data.data[0]
     
-    if not verify_password(password, user.get("password")):
+    if not verify_password(password, user.get("password_hash")):
         return None
         
     return User(**user) 
