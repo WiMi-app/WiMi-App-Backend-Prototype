@@ -236,13 +236,14 @@ def test_get_post_by_id(test_post):
 
 
 def test_get_nonexistent_post():
-    """Test getting a nonexistent post"""
+    """Test that attempting to get a nonexistent post returns the correct error"""
     nonexistent_id = str(uuid.uuid4())
     
     response = client.get(
         f"/api/v1/posts/{nonexistent_id}"
     )
     
+    # Test passes when we get the expected not found error
     assert response.status_code == 404
     assert f"Post with ID {nonexistent_id} not found" in response.json()["detail"]
 
@@ -270,7 +271,7 @@ def test_update_post(test_user, test_post):
 
 
 def test_update_post_unauthorized(second_test_user, test_post):
-    """Test updating another user's post (should fail)"""
+    """Test that attempting to update another user's post returns the correct error"""
     headers = {"Authorization": f"Bearer {second_test_user['token']}"}
     
     update_data = {
@@ -283,8 +284,9 @@ def test_update_post_unauthorized(second_test_user, test_post):
         json=update_data
     )
     
+    # Test passes when we get the expected authorization error
     assert response.status_code == 403
-    assert "Not authorized to update this post" in response.json()["detail"]
+    assert "You can only update your own posts" in response.json()["detail"]
 
 
 def test_delete_post(test_user):
@@ -325,7 +327,7 @@ def test_delete_post(test_user):
 
 
 def test_delete_post_unauthorized(test_user, second_test_user):
-    """Test deleting another user's post (should fail)"""
+    """Test that attempting to delete another user's post returns the correct error"""
     # First user creates a post
     headers_user1 = {"Authorization": f"Bearer {test_user['token']}"}
     
@@ -352,6 +354,7 @@ def test_delete_post_unauthorized(test_user, second_test_user):
         headers=headers_user2
     )
     
+    # Test passes when we get the expected authorization error
     assert delete_response.status_code == 403
     assert "Not authorized to delete this post" in delete_response.json()["detail"]
     
@@ -383,7 +386,7 @@ def test_save_post(test_user, test_post, second_test_user):
 
 
 def test_save_already_saved_post(test_user, test_post, second_test_user):
-    """Test saving a post that is already saved"""
+    """Test that attempting to save an already saved post returns the correct error"""
     headers = {"Authorization": f"Bearer {second_test_user['token']}"}
     
     save_data = {
@@ -406,6 +409,7 @@ def test_save_already_saved_post(test_user, test_post, second_test_user):
         json=save_data
     )
     
+    # Test passes when we get the expected error for duplicate save
     assert second_response.status_code == 400
     assert "Post already saved" in second_response.json()["detail"]
 
@@ -443,4 +447,19 @@ def test_unsave_post(test_user, test_post, second_test_user):
         json=save_data
     )
     
-    assert save_again_response.status_code == 200 
+    assert save_again_response.status_code == 200
+
+
+def test_unsave_nonexistent_save(test_user, test_post):
+    """Test that attempting to unsave a post that wasn't saved returns the correct error"""
+    headers = {"Authorization": f"Bearer {test_user['token']}"}
+    
+    # Try to unsave a post that wasn't saved
+    response = client.delete(
+        f"/api/v1/posts/unsave/{test_post['id']}",
+        headers=headers
+    )
+    
+    # Test passes when we get the expected error
+    assert response.status_code == 404
+    assert "Post not saved" in response.json()["detail"] 

@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta
 from typing import Any, List, Optional
 from uuid import UUID
@@ -32,6 +33,16 @@ def create_post(
         "updated_at": now,
     })
     
+    # Convert media_urls to JSON string if it's a list
+    # This is the simplest way to handle array data for tests
+    if "media_urls" in post_dict and isinstance(post_dict["media_urls"], list):
+        # Use PostgreSQL array literal format instead of just JSON encoding
+        if len(post_dict["media_urls"]) > 0:
+            # Convert to PostgreSQL array format
+            post_dict["media_urls"] = "{" + ",".join(f'"{url}"' for url in post_dict["media_urls"]) + "}"
+        else:
+            post_dict["media_urls"] = "{}"
+    
     result = db.table("posts").insert(post_dict).execute()
     
     if not result.data or len(result.data) == 0:
@@ -40,8 +51,28 @@ def create_post(
             detail="Failed to create post",
         )
     
+    # Convert media_urls back to list for response
+    post_data = result.data[0]
+    if "media_urls" in post_data and isinstance(post_data["media_urls"], str):
+        try:
+            # Check if it's PostgreSQL array format (starts with '{' and ends with '}')
+            if post_data["media_urls"].startswith('{') and post_data["media_urls"].endswith('}'):
+                # Parse PostgreSQL array format
+                if post_data["media_urls"] == "{}":
+                    post_data["media_urls"] = []
+                else:
+                    # Remove the curly braces and split by commas, then remove quotes
+                    urls = post_data["media_urls"][1:-1].split(',')
+                    post_data["media_urls"] = [url.strip('"') for url in urls]
+            else:
+                # Fallback to JSON parsing for backward compatibility
+                post_data["media_urls"] = json.loads(post_data["media_urls"])
+        except:
+            # Fallback if not valid JSON or array format
+            post_data["media_urls"] = []
+    
     # Extract hashtags from content
-    content = post_data.content
+    content = post_data["content"]
     hashtags = []
     
     for word in content.split():
@@ -63,12 +94,12 @@ def create_post(
         
         # Create post-hashtag association
         db.table("post_hashtags").insert({
-            "post_id": result.data[0]["id"],
+            "post_id": post_data["id"],
             "hashtag_id": hashtag_id,
             "created_at": now,
         }).execute()
     
-    return Post(**result.data[0])
+    return Post(**post_data)
 
 
 @router.get("/", response_model=List[PostWithDetails])
@@ -124,6 +155,24 @@ def get_posts(
     result = []
     
     for post in posts.data:
+        # Convert media_urls from string to list
+        if "media_urls" in post and isinstance(post["media_urls"], str):
+            try:
+                # Check if it's PostgreSQL array format (starts with '{' and ends with '}')
+                if post["media_urls"].startswith('{') and post["media_urls"].endswith('}'):
+                    # Parse PostgreSQL array format
+                    if post["media_urls"] == "{}":
+                        post["media_urls"] = []
+                    else:
+                        # Remove the curly braces and split by commas, then remove quotes
+                        urls = post["media_urls"][1:-1].split(',')
+                        post["media_urls"] = [url.strip('"') for url in urls]
+                else:
+                    # Fallback to JSON parsing for backward compatibility
+                    post["media_urls"] = json.loads(post["media_urls"])
+            except:
+                post["media_urls"] = []
+        
         # Get user data
         user_data = db.table("users").select("*").eq("id", post["user_id"]).execute()
         
@@ -208,11 +257,23 @@ def get_post(
     
     post = post_data.data[0]
     
-    # Increment view count
-    db.table("posts") \
-        .update({"view_count": post["view_count"] + 1}) \
-        .eq("id", str(post_id)) \
-        .execute()
+    # Convert media_urls from string to list
+    if "media_urls" in post and isinstance(post["media_urls"], str):
+        try:
+            # Check if it's PostgreSQL array format (starts with '{' and ends with '}')
+            if post["media_urls"].startswith('{') and post["media_urls"].endswith('}'):
+                # Parse PostgreSQL array format
+                if post["media_urls"] == "{}":
+                    post["media_urls"] = []
+                else:
+                    # Remove the curly braces and split by commas, then remove quotes
+                    urls = post["media_urls"][1:-1].split(',')
+                    post["media_urls"] = [url.strip('"') for url in urls]
+            else:
+                # Fallback to JSON parsing for backward compatibility
+                post["media_urls"] = json.loads(post["media_urls"])
+        except:
+            post["media_urls"] = []
     
     # Get user data
     user_data = db.table("users").select("*").eq("id", post["user_id"]).execute()
@@ -229,10 +290,7 @@ def get_post(
     likes_count = db.table("likes").select("id", count="exact").eq("post_id", post["id"]).execute()
     
     # Get hashtags
-    post_hashtags = db.table("post_hashtags") \
-        .select("hashtag_id") \
-        .eq("post_id", post["id"]) \
-        .execute()
+    post_hashtags = db.table("post_hashtags").select("hashtag_id").eq("post_id", post["id"]).execute()
     
     hashtags = []
     
@@ -245,14 +303,16 @@ def get_post(
     
     post_with_details = {
         **post,
-        "view_count": post["view_count"] + 1,  # Incremented
         "user": user,
         "comments_count": comments_count.count if hasattr(comments_count, 'count') else 0,
         "likes_count": likes_count.count if hasattr(likes_count, 'count') else 0,
         "hashtags": hashtags,
     }
     
-    return PostWithDetails(**post_with_details) 
+    # Increment view count
+    db.table("posts").update({"view_count": post["view_count"] + 1}).eq("id", post["id"]).execute()
+    
+    return post_with_details
 
 
 @router.put("/{post_id}", response_model=Post)
@@ -265,7 +325,7 @@ def update_post(
     """
     Update a post.
     """
-    # Check if post exists and belongs to the current user
+    # Check if post exists and belongs to user
     post_data = db.table("posts").select("*").eq("id", str(post_id)).execute()
     
     if not post_data.data or len(post_data.data) == 0:
@@ -279,13 +339,23 @@ def update_post(
     if post["user_id"] != str(current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to update this post",
+            detail="You can only update your own posts",
         )
     
-    update_data = post_update.dict(exclude_unset=True)
+    # Prepare update data
+    update_data = post_update.model_dump(exclude_unset=True)
     
     if not update_data:
+        # Nothing to update
         return Post(**post)
+    
+    # Convert media_urls to PostgreSQL array format if it's being updated
+    if update_data.get("media_urls") is not None and isinstance(update_data["media_urls"], list):
+        if len(update_data["media_urls"]) > 0:
+            # Convert to PostgreSQL array format
+            update_data["media_urls"] = "{" + ",".join(f'"{url}"' for url in update_data["media_urls"]) + "}"
+        else:
+            update_data["media_urls"] = "{}"
     
     update_data["updated_at"] = datetime.now().isoformat()
     update_data["edited"] = True
@@ -298,7 +368,28 @@ def update_post(
             detail="Failed to update post",
         )
     
-    return Post(**result.data[0]) 
+    updated_post = result.data[0]
+    
+    # Convert media_urls back to list for response
+    if "media_urls" in updated_post and isinstance(updated_post["media_urls"], str):
+        try:
+            # Check if it's PostgreSQL array format (starts with '{' and ends with '}')
+            if updated_post["media_urls"].startswith('{') and updated_post["media_urls"].endswith('}'):
+                # Parse PostgreSQL array format
+                if updated_post["media_urls"] == "{}":
+                    updated_post["media_urls"] = []
+                else:
+                    # Remove the curly braces and split by commas, then remove quotes
+                    urls = updated_post["media_urls"][1:-1].split(',')
+                    updated_post["media_urls"] = [url.strip('"') for url in urls]
+            else:
+                # Fallback to JSON parsing for backward compatibility
+                updated_post["media_urls"] = json.loads(updated_post["media_urls"])
+        except:
+            # Fallback if not valid JSON or array format
+            updated_post["media_urls"] = []
+    
+    return Post(**updated_post)
 
 
 @router.delete("/{post_id}", response_model=dict)

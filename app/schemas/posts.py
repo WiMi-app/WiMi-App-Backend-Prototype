@@ -16,7 +16,7 @@ class PostBase(BaseModel):
 
 
 class PostCreate(PostBase):
-    image_metadata: Optional[Dict[str, Any]] = None
+    pass
 
 
 class PostUpdate(BaseModel):

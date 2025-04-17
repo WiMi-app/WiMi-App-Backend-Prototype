@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional, Dict
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
 from supabase import Client
 
 from app.core.deps import get_current_active_user
@@ -46,7 +46,7 @@ def create_challenge(
     
     if not result.data or len(result.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create challenge",
         )
     
@@ -166,7 +166,7 @@ def get_challenge(
     
     if not challenge_data.data or len(challenge_data.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"Challenge with ID {challenge_id} not found",
         )
     
@@ -184,12 +184,12 @@ def get_challenge(
             
             if not participant.data or len(participant.data) == 0:
                 raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
+                    status_code=http_status.HTTP_403_FORBIDDEN,
                     detail="You don't have permission to view this private challenge",
                 )
         else:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
+                status_code=http_status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to view this private challenge",
             )
     
@@ -249,7 +249,7 @@ def update_challenge(
     
     if not challenge_data.data or len(challenge_data.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"Challenge with ID {challenge_id} not found",
         )
     
@@ -258,7 +258,7 @@ def update_challenge(
     # Check if user is the creator
     if challenge["creator_id"] != str(current_user.id):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=http_status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to update this challenge",
         )
     
@@ -277,7 +277,7 @@ def update_challenge(
     
     if not result.data or len(result.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update challenge",
         )
     
@@ -297,7 +297,7 @@ def delete_challenge(
     
     if not challenge_data.data or len(challenge_data.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"Challenge with ID {challenge_id} not found",
         )
     
@@ -306,7 +306,7 @@ def delete_challenge(
     # Check if user is the creator
     if challenge["creator_id"] != str(current_user.id):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=http_status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to delete this challenge",
         )
     
@@ -325,63 +325,70 @@ def join_challenge(
     """
     Join a challenge.
     """
-    challenge_id = join_data.challenge_id
-    
     # Check if challenge exists
-    challenge_data = db.table("challenges").select("*").eq("id", str(challenge_id)).execute()
+    challenge_data = db.table("challenges").select("*").eq("id", str(join_data.challenge_id)).execute()
     
     if not challenge_data.data or len(challenge_data.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Challenge with ID {challenge_id} not found",
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Challenge with ID {join_data.challenge_id} not found",
         )
     
     challenge = challenge_data.data[0]
     
-    # Check if user is already a participant
-    existing = db.table("challenge_participants") \
+    # Check if already joined
+    existing_participant = db.table("challenge_participants") \
         .select("*") \
-        .eq("challenge_id", str(challenge_id)) \
+        .eq("challenge_id", str(join_data.challenge_id)) \
         .eq("user_id", str(current_user.id)) \
         .execute()
     
-    if existing.data and len(existing.data) > 0:
+    if existing_participant.data and len(existing_participant.data) > 0:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You are already participating in this challenge",
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="You have already joined this challenge",
         )
     
-    # Check max participants limit
-    if challenge["max_participants"]:
-        participants_count = db.table("challenge_participants") \
-            .select("user_id", count="exact") \
-            .eq("challenge_id", str(challenge_id)) \
-            .execute()
-        
-        count = participants_count.count if hasattr(participants_count, 'count') else 0
-        
-        if count >= challenge["max_participants"]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="This challenge has reached its maximum number of participants",
-            )
+    # Check if it's a private challenge
+    if challenge.get("is_private", False) and challenge["creator_id"] != str(current_user.id):
+        # Check if user has an invitation
+        # This is a simpler implementation than would be used in a real app
+        # In a real app, we'd have an invitation system
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="This is a private challenge. You need an invitation to join.",
+        )
     
-    # Add user as participant
+    # Join the challenge
     now = get_utc_now()
     participant_data = {
-        "challenge_id": str(challenge_id),
+        "challenge_id": str(join_data.challenge_id),
         "user_id": str(current_user.id),
-        "joined_at": now,
         "status": "active",
+        "joined_at": now,
     }
     
     result = db.table("challenge_participants").insert(participant_data).execute()
     
     if not result.data or len(result.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to join challenge",
         )
+    
+    # Create notification for challenge creator
+    if challenge["creator_id"] != str(current_user.id):
+        notification_data = {
+            "user_id": challenge["creator_id"],
+            "triggered_by_user_id": str(current_user.id),
+            "type": "challenge_join",
+            "message": f"{current_user.username} joined your challenge: {challenge['title']}",
+            "created_at": now,
+            "entity_id": str(join_data.challenge_id),
+            "entity_type": "challenge",
+        }
+        
+        db.table("notifications").insert(notification_data).execute()
     
     return ChallengeParticipant(**result.data[0])
 
@@ -400,7 +407,7 @@ def leave_challenge(
     
     if not challenge_data.data or len(challenge_data.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"Challenge with ID {challenge_id} not found",
         )
     
@@ -413,7 +420,7 @@ def leave_challenge(
     
     if not participant.data or len(participant.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail="You are not participating in this challenge",
         )
     
@@ -445,7 +452,7 @@ def add_post_to_challenge(
     
     if not challenge_data.data or len(challenge_data.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"Challenge with ID {challenge_id} not found",
         )
     
@@ -454,7 +461,7 @@ def add_post_to_challenge(
     
     if not post_result.data or len(post_result.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"Post with ID {post_id} not found",
         )
     
@@ -462,7 +469,7 @@ def add_post_to_challenge(
     
     if post["user_id"] != str(current_user.id):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=http_status.HTTP_403_FORBIDDEN,
             detail="You can only add your own posts to a challenge",
         )
     
@@ -475,7 +482,7 @@ def add_post_to_challenge(
     
     if existing.data and len(existing.data) > 0:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail="This post is already added to the challenge",
         )
     
@@ -492,7 +499,7 @@ def add_post_to_challenge(
     
     if not result.data or len(result.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to add post to challenge",
         )
     
@@ -521,7 +528,7 @@ def get_challenge_posts(
     
     if not challenge_data.data or len(challenge_data.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"Challenge with ID {challenge_id} not found",
         )
     
@@ -539,12 +546,12 @@ def get_challenge_posts(
             
             if not participant.data or len(participant.data) == 0:
                 raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
+                    status_code=http_status.HTTP_403_FORBIDDEN,
                     detail="You don't have permission to view posts for this private challenge",
                 )
         else:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
+                status_code=http_status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to view posts for this private challenge",
             )
     
@@ -611,7 +618,7 @@ def get_challenge_participants(
     
     if not challenge_data.data or len(challenge_data.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"Challenge with ID {challenge_id} not found",
         )
     
@@ -629,12 +636,12 @@ def get_challenge_participants(
             
             if not participant.data or len(participant.data) == 0:
                 raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
+                    status_code=http_status.HTTP_403_FORBIDDEN,
                     detail="You don't have permission to view participants for this private challenge",
                 )
         else:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
+                status_code=http_status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to view participants for this private challenge",
             )
     
@@ -687,7 +694,7 @@ def get_challenge_participants(
 
 @router.get("/search", response_model=List[Dict])
 def search_challenges(
-    query: str = "",
+    query: str,
     skip: int = 0,
     limit: int = 10,
     db: Client = Depends(get_supabase),
@@ -696,61 +703,69 @@ def search_challenges(
     """
     Search for challenges by title or description.
     """
-    # Simple text search using client-side filtering
-    challenges_query = db.table("challenges").select("*").order("created_at", desc=True)
-    result = challenges_query.execute()
+    # Build basic query for public challenges
+    base_query = db.table("challenges").select("*")
     
-    if not result.data:
+    if not current_user:
+        base_query = base_query.eq("is_private", False)
+    
+    # Get all challenges since we can't do text search directly
+    # In a real app, we would use more efficient search techniques
+    challenges = base_query.execute()
+    
+    if not challenges.data:
         return []
     
-    # Filter by search query if provided
+    # Filter challenges that match the search query
+    query_lower = query.lower()
     filtered_challenges = []
-    search_term = query.lower().strip() if query else ""
     
-    for challenge in result.data:
+    for challenge in challenges.data:
+        # Search in title and description
         title = challenge.get("title", "").lower()
-        description = challenge.get("description", "").lower() if challenge.get("description") else ""
+        description = challenge.get("description", "").lower()
         
-        # If no search term or it matches title/description
-        if not search_term or search_term in title or search_term in description:
-            # Check privacy settings
-            if not challenge.get("is_private", False) or not current_user:
-                filtered_challenges.append(challenge)
-                continue
+        if query_lower in title or query_lower in description:
+            # For private challenges, ensure access
+            if challenge.get("is_private", False):
+                if not current_user:
+                    continue
                 
-            # User is authenticated and challenge is private
-            if challenge["creator_id"] == str(current_user.id):
-                filtered_challenges.append(challenge)
-                continue
-                
-            # Check if user is a participant
-            participant = db.table("challenge_participants") \
-                .select("*") \
-                .eq("challenge_id", challenge["id"]) \
-                .eq("user_id", str(current_user.id)) \
-                .execute()
+                if challenge["creator_id"] != str(current_user.id):
+                    # Check if user is a participant
+                    participant = db.table("challenge_participants") \
+                        .select("*") \
+                        .eq("challenge_id", challenge["id"]) \
+                        .eq("user_id", str(current_user.id)) \
+                        .execute()
+                    
+                    if not participant.data or len(participant.data) == 0:
+                        continue
             
-            if participant.data and len(participant.data) > 0:
-                filtered_challenges.append(challenge)
+            filtered_challenges.append(challenge)
     
     # Apply pagination
-    paginated = filtered_challenges[skip:skip + limit] if filtered_challenges else []
+    paginated_challenges = filtered_challenges[skip:skip + limit]
     
-    # Enhance challenges with additional data
+    # Enrich challenges with additional data
     result = []
-    for challenge in paginated:
-        # Get creator
-        creator = None
+    
+    for challenge in paginated_challenges:
+        # Get creator data
         creator_data = db.table("users").select("*").eq("id", challenge["creator_id"]).execute()
+        
         if creator_data.data and len(creator_data.data) > 0:
             creator = creator_data.data[0]
+        else:
+            creator = None
         
-        # Get counts
+        # Get participants count
         participants_count = db.table("challenge_participants") \
             .select("user_id", count="exact") \
             .eq("challenge_id", challenge["id"]) \
             .execute()
         
+        # Get posts count
         posts_count = db.table("challenge_posts") \
             .select("post_id", count="exact") \
             .eq("challenge_id", challenge["id"]) \
@@ -767,7 +782,6 @@ def search_challenges(
             
             is_joined = bool(joined.data and len(joined.data) > 0)
         
-        # Combine all data
         challenge_with_details = {
             **challenge,
             "creator": creator,
@@ -907,82 +921,95 @@ def get_trending_challenges(
     return result
 
 
-@router.put("/participant/status", response_model=ChallengeParticipant)
+@router.put("/participant/status")
 def update_participant_status(
     challenge_id: UUID,
-    status: str = Query(None, description="Status of the participant (active, completed, dropped)"),
-    participant_status: str = Query(None, description="Alternative name for status parameter (active, completed, dropped)"),
+    status: str = Query(..., description="Status of the participant (active, completed, dropped)"),
     current_user: User = Depends(get_current_active_user),
     db: Client = Depends(get_supabase),
-) -> Any:
+):
     """
-    Update the status of a challenge participant (active, completed, dropped).
+    Update the status of a participant in a challenge.
     """
-    # Use participant_status if provided, otherwise use status
-    final_status = participant_status if participant_status is not None else status
-    
-    if final_status is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Either 'status' or 'participant_status' parameter must be provided",
-        )
-    
     # Check if challenge exists
     challenge_data = db.table("challenges").select("*").eq("id", str(challenge_id)).execute()
     
     if not challenge_data.data or len(challenge_data.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"Challenge with ID {challenge_id} not found",
         )
     
-    challenge = challenge_data.data[0]
-    
     # Check if user is a participant
-    participant = db.table("challenge_participants") \
+    participant_data = db.table("challenge_participants") \
         .select("*") \
         .eq("challenge_id", str(challenge_id)) \
         .eq("user_id", str(current_user.id)) \
         .execute()
     
-    if not participant.data or len(participant.data) == 0:
+    if not participant_data.data or len(participant_data.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail="You are not a participant in this challenge",
         )
     
-    # Check if status is valid
-    if final_status not in ["active", "completed", "dropped"]:
+    # Validate status value
+    valid_statuses = ["active", "completed", "dropped"]
+    if status not in valid_statuses:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid status. Must be one of: active, completed, dropped",
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}",
         )
     
-    # Update status
+    # Update the participant status
+    now = get_utc_now()
+    update_data = {
+        "status": status,
+        "updated_at": now,
+    }
+    
+    if status == "completed":
+        update_data["completed_at"] = now
+    
+    # Remove last_check_in field since it doesn't exist in the schema
+    if "last_check_in" in update_data:
+        del update_data["last_check_in"]
+    
     result = db.table("challenge_participants") \
-        .update({"status": final_status}) \
+        .update(update_data) \
         .eq("challenge_id", str(challenge_id)) \
         .eq("user_id", str(current_user.id)) \
         .execute()
     
     if not result.data or len(result.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update participant status",
         )
     
-    # If status is completed, create an achievement
-    if final_status == "completed":
-        now = get_utc_now()
-        achievement_data = {
-            "challenge_id": str(challenge_id),
-            "user_id": str(current_user.id),
-            "achievement_type": "completion",
-            "description": f"Completed challenge: {challenge['title']}",
-            "achieved_at": now,
-        }
+    # If the status is completed, potentially create an achievement
+    if status == "completed":
+        challenge = challenge_data.data[0]
         
-        db.table("challenge_achievements").insert(achievement_data).execute()
+        # Check if already has achievement for this challenge
+        existing_achievement = db.table("challenge_achievements") \
+            .select("*") \
+            .eq("challenge_id", str(challenge_id)) \
+            .eq("user_id", str(current_user.id)) \
+            .eq("achievement_type", "completion") \
+            .execute()
+        
+        if not existing_achievement.data or len(existing_achievement.data) == 0:
+            # Create a completion achievement
+            achievement_data = {
+                "challenge_id": str(challenge_id),
+                "user_id": str(current_user.id),
+                "achievement_type": "completion",
+                "description": f"Completed the challenge: {challenge['title']}",
+                "achieved_at": now,
+            }
+            
+            db.table("challenge_achievements").insert(achievement_data).execute()
     
     return ChallengeParticipant(**result.data[0])
 
@@ -1033,7 +1060,7 @@ def add_achievement(
     
     if not challenge_data.data or len(challenge_data.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"Challenge with ID {challenge_id} not found",
         )
     
@@ -1042,7 +1069,7 @@ def add_achievement(
     # Check if user is the creator
     if challenge["creator_id"] != str(current_user.id):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=http_status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to add an achievement to this challenge",
         )
     
@@ -1060,7 +1087,7 @@ def add_achievement(
     
     if not result.data or len(result.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to add achievement",
         )
     
@@ -1081,7 +1108,7 @@ def delete_achievement(
     
     if not achievement_data.data or len(achievement_data.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail=f"Achievement with ID {achievement_id} not found",
         )
     
@@ -1090,7 +1117,7 @@ def delete_achievement(
     # Check if user is the creator
     if achievement["user_id"] != str(current_user.id):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=http_status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to delete this achievement",
         )
     
