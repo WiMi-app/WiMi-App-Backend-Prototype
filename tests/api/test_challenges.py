@@ -484,74 +484,60 @@ def test_delete_challenge(test_user, test_challenge):
     assert not challenge.data or len(challenge.data) == 0
 
 
-def test_search_challenges(test_user):
+def test_search_challenges(test_user, test_challenge):
     """
-    Test the search_challenges endpoint with a very specific keyword.
+    Test searching for challenges by title or description.
     
-    This test creates a challenge with a unique keyword and verifies that
-    searching for this keyword returns the challenge.
+    This test:
+    1. Creates test challenge
+    2. Searches for it using part of the title
+    3. Verifies the search results contain the challenge
     
     Args:
         test_user: Fixture providing authenticated user
+        test_challenge: Fixture providing existing challenge
     """
     headers = {"Authorization": f"Bearer {test_user['token']}"}
     
-    # Create a test challenge with a unique keyword
-    unique_keyword = f"unique{uuid.uuid4().hex[:8]}"
-    challenge = {
-        "title": f"Test Challenge with {unique_keyword}",
-        "description": "A challenge with a unique search term",
-        "creator_id": test_user["id"],
-        "created_at": datetime.now().isoformat(),
-        "updated_at": datetime.now().isoformat(),
-        "is_active": True,
-        "is_private": False,
-        "repetition": "daily",
-        "check_in_time": time(8, 0).isoformat(),
-    }
+    # Extract a significant part of the title to search for
+    search_term = test_challenge["title"].split()[0]  # Use first word of title
     
-    # Insert challenge into database
-    result = supabase.table("challenges").insert(challenge).execute()
-    assert result.data and len(result.data) > 0, "Failed to create test challenge"
-    challenge_id = result.data[0]["id"]
+    # Search for challenges
+    response = client.get(
+        f"/api/v1/challenges/search?query={urllib.parse.quote(search_term)}",
+        headers=headers
+    )
     
-    try:
-        # Search using the unique keyword
-        response = client.get(
-            f"/api/v1/challenges/search?query={unique_keyword}",
-            headers=headers
-        )
-        
-        # Verify the response
-        assert response.status_code == 200
-        data = response.json()
-        
-        # Verify our challenge is found
-        assert isinstance(data, list)
-        assert len(data) > 0, "No challenges returned from search"
-        
-        # Find our specific challenge
-        found = False
-        for c in data:
-            if c["id"] == challenge_id:
-                found = True
-                break
-        
-        assert found, f"Challenge with keyword '{unique_keyword}' not found in search results"
-        
-    finally:
-        # Clean up
-        supabase.table("challenges").delete().eq("id", challenge_id).execute()
+    assert response.status_code == 200
+    data = response.json()
+    
+    # Verify search results
+    assert isinstance(data, list), "Response should be a list of challenges"
+    
+    # Check if our challenge is in the results
+    challenge_found = False
+    for challenge in data:
+        if challenge["id"] == test_challenge["id"]:
+            challenge_found = True
+            assert challenge["title"] == test_challenge["title"]
+            assert challenge["description"] == test_challenge["description"]
+            assert "creator" in challenge
+            assert "participant_count" in challenge
+            assert "posts_count" in challenge
+            assert "is_joined" in challenge
+            break
+    
+    assert challenge_found, "Test challenge not found in search results"
 
 
 def test_update_participant_status(second_test_user, test_challenge):
     """
-    Test updating a participant's status in a challenge.
+    Test updating a participant's status for a challenge.
     
     This test:
-    1. Makes second user join the challenge again
-    2. Updates their status to "completed"
-    3. Verifies status update and achievement creation
+    1. Second user joins the challenge
+    2. Updates their participant status to 'completed'
+    3. Verifies the status was updated successfully
     
     Args:
         second_test_user: Fixture providing another authenticated user
@@ -565,26 +551,22 @@ def test_update_participant_status(second_test_user, test_challenge):
         .eq("user_id", second_test_user["id"]) \
         .execute()
     
-    # Clean up any existing achievements before test
-    supabase.table("challenge_achievements").delete() \
-        .eq("challenge_id", test_challenge["id"]) \
-        .eq("user_id", second_test_user["id"]) \
-        .execute()
-    
-    # Join the challenge first
+    # First, join the challenge
     join_data = {
         "challenge_id": test_challenge["id"]
     }
     
-    client.post(
+    join_response = client.post(
         "/api/v1/challenges/join",
         headers=headers,
         json=join_data
     )
     
-    # Update status to completed
+    assert join_response.status_code == 200
+    
+    # Update participant status to 'completed'
     response = client.put(
-        f"/api/v1/challenges/participant/status?challenge_id={test_challenge['id']}&participant_status=completed",
+        f"/api/v1/challenges/participant/status?challenge_id={test_challenge['id']}&status=completed",
         headers=headers
     )
     
@@ -595,16 +577,27 @@ def test_update_participant_status(second_test_user, test_challenge):
     assert data["user_id"] == second_test_user["id"]
     assert data["status"] == "completed"
     
-    # Verify achievement was created
-    achievements = supabase.table("challenge_achievements") \
+    # Verify status in database
+    participant = supabase.table("challenge_participants") \
         .select("*") \
         .eq("challenge_id", test_challenge["id"]) \
         .eq("user_id", second_test_user["id"]) \
         .execute()
     
-    assert achievements.data
-    assert len(achievements.data) > 0
-    assert achievements.data[0]["achievement_type"] == "completion"
+    assert participant.data
+    assert len(participant.data) > 0
+    assert participant.data[0]["status"] == "completed"
+    
+    # Check if achievement was created
+    achievement = supabase.table("challenge_achievements") \
+        .select("*") \
+        .eq("challenge_id", test_challenge["id"]) \
+        .eq("user_id", second_test_user["id"]) \
+        .eq("achievement_type", "completion") \
+        .execute()
+    
+    assert achievement.data
+    assert len(achievement.data) > 0
     
     # Clean up after test
     supabase.table("challenge_participants").delete() \
@@ -615,4 +608,4 @@ def test_update_participant_status(second_test_user, test_challenge):
     supabase.table("challenge_achievements").delete() \
         .eq("challenge_id", test_challenge["id"]) \
         .eq("user_id", second_test_user["id"]) \
-        .execute() 
+        .execute()

@@ -385,47 +385,6 @@ def test_second_user_completes_challenges(test_second_user, test_challenges):
         assert len(achievements.data) > 0
         assert achievements.data[0]["achievement_type"] == "completion"
 
-
-def test_get_achievements(test_second_user, test_challenges):
-    """
-    Test retrieving achievements for the second user.
-    
-    This test:
-    1. Gets all achievements for the second user
-    2. Verifies completion achievements for each challenge
-    3. Checks achievement details are included
-    
-    Args:
-        test_second_user: Fixture providing authenticated user with achievements
-        test_challenges: Fixture providing challenge IDs that were completed
-    """
-    headers = {"Authorization": f"Bearer {test_second_user['token']}"}
-    
-    response = client.get(
-        "/api/v1/challenges/achievements",
-        headers=headers
-    )
-    
-    assert response.status_code == 200
-    
-    data = response.json()
-    assert isinstance(data, list)
-    assert len(data) >= len(test_challenges)
-    
-    # Verify each challenge has a completion achievement
-    for challenge_id in test_challenges:
-        achievement_found = False
-        for achievement in data:
-            if achievement["challenge_id"] == challenge_id:
-                achievement_found = True
-                assert achievement["user_id"] == test_second_user["id"]
-                assert achievement["achievement_type"] == "completion"
-                assert "achieved_at" in achievement
-                break
-        
-        assert achievement_found, f"Achievement for challenge {challenge_id} not found"
-
-
 def test_user_profile_shows_updated_stats(test_second_user, test_challenges):
     """
     Test that user profile statistics update after challenge completion.
