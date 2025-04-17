@@ -1,17 +1,19 @@
-from datetime import datetime, timedelta
-from typing import Any
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from supabase import Client
+import logging
 
 from app.core.config import settings
-from app.core.deps import authenticate_user
+from app.core.deps import authenticate_user, get_current_user
 from app.core.security import create_access_token, get_password_hash
 from app.db.database import get_supabase
 from app.schemas.auth import TokenData, LoginRequest
 from app.schemas.users import User, UserCreate
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -38,14 +40,14 @@ def login_access_token(
     )
     
     # Update last login time
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     db.table("users").update({"last_login": now}).eq("id", str(user.id)).execute()
     
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "user_id": user.id,
-        "expires": datetime.now() + access_token_expires,
+        "expires": datetime.now(timezone.utc) + access_token_expires,
     }
 
 
@@ -71,14 +73,14 @@ def login_email(
     )
     
     # Update last login time
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     db.table("users").update({"last_login": now}).eq("id", str(user.id)).execute()
     
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "user_id": user.id,
-        "expires": datetime.now() + access_token_expires,
+        "expires": datetime.now(timezone.utc) + access_token_expires,
     }
 
 
@@ -110,7 +112,7 @@ def register_user(
     hashed_password = get_password_hash(user_data.password)
     
     # Create user dict for insertion using the safe method
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     user_dict = user_data.model_dump_json_safe()
     
     user_dict.update({
@@ -128,4 +130,20 @@ def register_user(
             detail="Failed to create user",
         )
     
-    return User(**result.data[0]) 
+    return User(**result.data[0])
+
+
+@router.get("/verify-token", response_model=Dict[str, Any])
+def verify_token(current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
+    """
+    Debug endpoint to verify if a token is valid.
+    Returns user information if the token is valid.
+    """
+    logger.info(f"Token verification successful for user: {current_user.id}")
+    return {
+        "status": "success",
+        "message": "Token is valid",
+        "user_id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email
+    } 

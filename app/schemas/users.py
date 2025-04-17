@@ -7,8 +7,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.core.config import settings
 from pydantic import BaseModel, EmailStr, Field, HttpUrl, model_validator
 
-BASE_ICON_URL = f"{settings.SUPABASE_URL}/storage/v1/object/sign/images/default/icon.png?token={settings.SUPABASE_KEY}"
-BASE_COVER_IMAGE_URL = f"{settings.SUPABASE_URL}/storage/v1/object/sign/images/default/cover.png?token={settings.SUPABASE_KEY}"
+BASE_ICON_URL = str(f"{settings.SUPABASE_URL}/storage/v1/object/sign/images/default/icon.png?token={settings.SUPABASE_KEY}")
+BASE_COVER_IMAGE_URL = str(f"{settings.SUPABASE_URL}/storage/v1/object/sign/images/default/cover.png?token={settings.SUPABASE_KEY}")
 
 class UserBase(BaseModel):
     username: str

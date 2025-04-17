@@ -1,7 +1,7 @@
 import json
 import uuid
-from datetime import datetime
-from typing import Dict
+from datetime import datetime, timedelta
+from typing import Dict, List
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,28 +22,41 @@ supabase: Client = create_client(
 
 @pytest.fixture(scope="module")
 def test_user():
-    """Create a test user and return credentials"""
+    """
+    Create a primary test user for user-challenge relationship testing.
+    
+    This fixture:
+    1. Creates a test user with randomized credentials
+    2. Registers the user via the auth API
+    3. Logs in the user to obtain access token
+    4. Yields the user data including token
+    5. Cleans up by deleting the user after tests complete
+    
+    Returns:
+        dict: User data including id, username, email, and auth token
+    """
     username = f"testuser_{uuid.uuid4().hex[:8]}"
     email = f"{username}@example.com"
     password = "testpassword123"
     
-    # Create test user
+    # Create user using the registration API instead of direct DB insert
     user_data = {
         "username": username,
         "email": email,
         "password": password,
         "full_name": "Test User",
         "bio": "Test bio",
-        "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat(),
     }
     
-    result = supabase.table("users").insert(user_data).execute()
+    register_response = client.post(
+        "/api/v1/auth/register",
+        json=user_data
+    )
     
-    if not result.data or len(result.data) == 0:
-        pytest.fail("Failed to create test user")
+    if register_response.status_code != 200:
+        pytest.fail(f"Failed to create test user: {register_response.json()}")
     
-    user_id = result.data[0]["id"]
+    user_id = register_response.json()["id"]
     
     # Login to get access token
     login_response = client.post(
@@ -69,7 +82,21 @@ def test_user():
 
 @pytest.fixture(scope="module")
 def test_challenges(test_user):
-    """Create multiple test challenges for the user"""
+    """
+    Create multiple test challenges for the user.
+    
+    This fixture:
+    1. Creates 3 test challenges with unique titles
+    2. Sets the test user as the creator
+    3. Yields challenge IDs for testing
+    4. Cleans up by deleting all challenges after tests
+    
+    Args:
+        test_user: Fixture providing creator credentials
+    
+    Returns:
+        list: List of challenge IDs created for testing
+    """
     # Create 3 test challenges
     challenge_ids = []
     
@@ -78,8 +105,8 @@ def test_challenges(test_user):
             "title": f"Test Challenge {i} {uuid.uuid4().hex[:8]}",
             "description": f"Test description for challenge {i}",
             "creator_id": test_user["id"],
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
             "is_active": True,
             "is_private": False,
         }
@@ -100,28 +127,41 @@ def test_challenges(test_user):
 
 @pytest.fixture(scope="module")
 def test_second_user():
-    """Create a second test user for joining challenges"""
+    """
+    Create a secondary test user for testing user-challenge interactions.
+    
+    This fixture:
+    1. Creates another test user with randomized credentials
+    2. Registers the user via the auth API
+    3. Logs in the user to obtain access token
+    4. Yields the user data including token
+    5. Cleans up by deleting the user after tests complete
+    
+    Returns:
+        dict: User data including id, username, email, and auth token
+    """
     username = f"testuser2_{uuid.uuid4().hex[:8]}"
     email = f"{username}@example.com"
     password = "testpassword123"
     
-    # Create test user
+    # Create user using the registration API instead of direct DB insert
     user_data = {
         "username": username,
         "email": email,
         "password": password,
         "full_name": "Test User 2",
         "bio": "Test bio 2",
-        "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat(),
     }
     
-    result = supabase.table("users").insert(user_data).execute()
+    register_response = client.post(
+        "/api/v1/auth/register",
+        json=user_data
+    )
     
-    if not result.data or len(result.data) == 0:
-        pytest.fail("Failed to create second test user")
+    if register_response.status_code != 200:
+        pytest.fail(f"Failed to create second test user: {register_response.json()}")
     
-    user_id = result.data[0]["id"]
+    user_id = register_response.json()["id"]
     
     # Login to get access token
     login_response = client.post(
@@ -146,7 +186,18 @@ def test_second_user():
 
 
 def test_get_user_with_challenge_stats(test_user, test_challenges):
-    """Test getting user profile with challenge statistics"""
+    """
+    Test retrieving user profile with challenge statistics.
+    
+    This test:
+    1. Gets the user profile for the test user
+    2. Verifies the profile includes challenge-related statistics
+    3. Checks that created challenges count is at least the number created
+    
+    Args:
+        test_user: Fixture providing authenticated user
+        test_challenges: Fixture providing challenge IDs created by user
+    """
     headers = {"Authorization": f"Bearer {test_user['token']}"}
     
     response = client.get(
@@ -158,6 +209,7 @@ def test_get_user_with_challenge_stats(test_user, test_challenges):
     
     data = response.json()
     assert data["username"] == test_user["username"]
+    assert data["email"] == test_user["email"]
     
     # Verify challenge statistics
     assert "created_challenges_count" in data
@@ -167,7 +219,18 @@ def test_get_user_with_challenge_stats(test_user, test_challenges):
 
 
 def test_get_user_created_challenges(test_user, test_challenges):
-    """Test getting challenges created by a user"""
+    """
+    Test retrieving challenges created by a specific user.
+    
+    This test:
+    1. Gets the list of challenges created by the test user
+    2. Verifies all test challenges appear in the results
+    3. Checks that challenge details and metadata are included
+    
+    Args:
+        test_user: Fixture providing authenticated user
+        test_challenges: Fixture providing challenge IDs created by user
+    """
     headers = {"Authorization": f"Bearer {test_user['token']}"}
     
     response = client.get(
@@ -197,10 +260,21 @@ def test_get_user_created_challenges(test_user, test_challenges):
 
 
 def test_second_user_joins_challenges(test_second_user, test_challenges):
-    """Test second user joining the test challenges"""
+    """
+    Test second user joining challenges created by the first user.
+    
+    This test:
+    1. Has the second user join all test challenges
+    2. Verifies each join operation succeeds
+    3. Confirms join status in the database
+    
+    Args:
+        test_second_user: Fixture providing another authenticated user
+        test_challenges: Fixture providing challenge IDs to join
+    """
     headers = {"Authorization": f"Bearer {test_second_user['token']}"}
     
-    # Join each test challenge
+    # Join each challenge
     for challenge_id in test_challenges:
         join_data = {
             "challenge_id": challenge_id
@@ -218,10 +292,31 @@ def test_second_user_joins_challenges(test_second_user, test_challenges):
         assert data["challenge_id"] == challenge_id
         assert data["user_id"] == test_second_user["id"]
         assert data["status"] == "active"
+        
+        # Verify in database
+        participant = supabase.table("challenge_participants") \
+            .select("*") \
+            .eq("challenge_id", challenge_id) \
+            .eq("user_id", test_second_user["id"]) \
+            .execute()
+        
+        assert participant.data
+        assert len(participant.data) > 0
 
 
 def test_get_user_joined_challenges(test_second_user, test_challenges):
-    """Test getting challenges joined by a user"""
+    """
+    Test retrieving challenges joined by a specific user.
+    
+    This test:
+    1. Gets the list of challenges joined by the second test user
+    2. Verifies all test challenges appear in the results
+    3. Checks that challenge details are included
+    
+    Args:
+        test_second_user: Fixture providing authenticated user who joined challenges
+        test_challenges: Fixture providing challenge IDs that were joined
+    """
     headers = {"Authorization": f"Bearer {test_second_user['token']}"}
     
     response = client.get(
@@ -235,7 +330,7 @@ def test_get_user_joined_challenges(test_second_user, test_challenges):
     assert isinstance(data, list)
     assert len(data) >= len(test_challenges)
     
-    # Verify each test challenge is in the response
+    # Verify each test challenge is in the joined challenges
     for challenge_id in test_challenges:
         challenge_found = False
         for challenge in data:
@@ -247,52 +342,103 @@ def test_get_user_joined_challenges(test_second_user, test_challenges):
                 assert challenge["is_joined"] == True
                 break
         
-        assert challenge_found, f"Challenge {challenge_id} not found in response"
+        assert challenge_found, f"Challenge {challenge_id} not found in joined challenges"
+
+
+def test_second_user_completes_challenges(test_second_user, test_challenges):
+    """
+    Test marking challenges as completed by the second user.
+    
+    This test:
+    1. Updates status of joined challenges to "completed"
+    2. Verifies the status change succeeds
+    3. Confirms achievements are created for completed challenges
+    
+    Args:
+        test_second_user: Fixture providing authenticated user who joined challenges
+        test_challenges: Fixture providing challenge IDs to mark as completed
+    """
+    headers = {"Authorization": f"Bearer {test_second_user['token']}"}
+    
+    # Mark each challenge as completed
+    for challenge_id in test_challenges:
+        response = client.put(
+            f"/api/v1/challenges/participant/status?challenge_id={challenge_id}&status=completed",
+            headers=headers
+        )
+        
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert data["challenge_id"] == challenge_id
+        assert data["user_id"] == test_second_user["id"]
+        assert data["status"] == "completed"
+        
+        # Verify achievement was created
+        achievements = supabase.table("challenge_achievements") \
+            .select("*") \
+            .eq("challenge_id", challenge_id) \
+            .eq("user_id", test_second_user["id"]) \
+            .execute()
+        
+        assert achievements.data
+        assert len(achievements.data) > 0
+        assert achievements.data[0]["achievement_type"] == "completion"
 
 
 def test_get_achievements(test_second_user, test_challenges):
-    """Test completing a challenge and getting achievements"""
+    """
+    Test retrieving achievements for the second user.
+    
+    This test:
+    1. Gets all achievements for the second user
+    2. Verifies completion achievements for each challenge
+    3. Checks achievement details are included
+    
+    Args:
+        test_second_user: Fixture providing authenticated user with achievements
+        test_challenges: Fixture providing challenge IDs that were completed
+    """
     headers = {"Authorization": f"Bearer {test_second_user['token']}"}
     
-    # Complete the first challenge
-    challenge_id = test_challenges[0]
-    status_params = {
-        "status": "completed"
-    }
-    
-    response = client.put(
-        f"/api/v1/challenges/participant/status?challenge_id={challenge_id}",
-        headers=headers,
-        params=status_params
-    )
-    
-    assert response.status_code == 200
-    
-    # Get achievements
-    achievements_response = client.get(
+    response = client.get(
         "/api/v1/challenges/achievements",
         headers=headers
     )
     
-    assert achievements_response.status_code == 200
+    assert response.status_code == 200
     
-    achievements = achievements_response.json()
-    assert isinstance(achievements, list)
-    assert len(achievements) > 0
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) >= len(test_challenges)
     
-    # Verify the achievement for the completed challenge exists
-    achievement_found = False
-    for achievement in achievements:
-        if achievement["challenge_id"] == challenge_id and achievement["user_id"] == test_second_user["id"]:
-            achievement_found = True
-            assert achievement["achievement_type"] == "completion"
-            break
-    
-    assert achievement_found, "Achievement for completed challenge not found"
+    # Verify each challenge has a completion achievement
+    for challenge_id in test_challenges:
+        achievement_found = False
+        for achievement in data:
+            if achievement["challenge_id"] == challenge_id:
+                achievement_found = True
+                assert achievement["user_id"] == test_second_user["id"]
+                assert achievement["achievement_type"] == "completion"
+                assert "achieved_at" in achievement
+                break
+        
+        assert achievement_found, f"Achievement for challenge {challenge_id} not found"
 
 
 def test_user_profile_shows_updated_stats(test_second_user, test_challenges):
-    """Test that user profile shows updated challenge statistics"""
+    """
+    Test that user profile statistics update after challenge completion.
+    
+    This test:
+    1. Gets the updated profile for the second test user
+    2. Verifies the joined challenges count matches expected
+    3. Checks that achievements count includes completed challenges
+    
+    Args:
+        test_second_user: Fixture providing authenticated user with achievements
+        test_challenges: Fixture providing challenge IDs that were completed
+    """
     headers = {"Authorization": f"Bearer {test_second_user['token']}"}
     
     response = client.get(
@@ -303,7 +449,11 @@ def test_user_profile_shows_updated_stats(test_second_user, test_challenges):
     assert response.status_code == 200
     
     data = response.json()
+    assert data["username"] == test_second_user["username"]
     
-    # Verify challenge statistics are updated
+    # Verify updated stats
+    assert "joined_challenges_count" in data
     assert data["joined_challenges_count"] >= len(test_challenges)
-    assert data["achievements_count"] >= 1  # From completing one challenge 
+    
+    assert "achievements_count" in data
+    assert data["achievements_count"] >= len(test_challenges) 

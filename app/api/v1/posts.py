@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, List, Optional
 from uuid import UUID
 
@@ -22,8 +22,10 @@ def create_post(
     """
     Create a new post.
     """
-    now = datetime.utcnow().isoformat()
-    post_dict = post_data.dict()
+    now = datetime.now().isoformat()
+        
+    # Prepare the post data for insertion
+    post_dict = post_data.model_dump()
     post_dict.update({
         "user_id": str(current_user.id),
         "created_at": now,
@@ -285,7 +287,7 @@ def update_post(
     if not update_data:
         return Post(**post)
     
-    update_data["updated_at"] = datetime.utcnow().isoformat()
+    update_data["updated_at"] = datetime.now().isoformat()
     update_data["edited"] = True
     
     result = db.table("posts").update(update_data).eq("id", str(post_id)).execute()
@@ -382,7 +384,7 @@ def save_post(
             detail="Post already saved",
         )
     
-    now = datetime.utcnow().isoformat()
+    now = datetime.now().isoformat()
     save_dict = {
         "user_id": str(current_user.id),
         "post_id": str(save_data.post_id),

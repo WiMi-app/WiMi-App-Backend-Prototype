@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 from fastapi import HTTPException
 
 
@@ -14,9 +14,9 @@ class LikeCreate(LikeBase):
     post_id: Optional[UUID] = None
     comment_id: Optional[UUID] = None
 
-    @validator('comment_id')
-    def validate_target(cls, comment_id, values):
-        post_id = values.get('post_id')
+    @field_validator('comment_id')
+    def validate_target(cls, comment_id, info):
+        post_id = info.data.get('post_id')
         if post_id is not None and comment_id is not None:
             raise HTTPException(status_code=400, detail="Cannot like both post and comment at the same time")
         if post_id is None and comment_id is None:

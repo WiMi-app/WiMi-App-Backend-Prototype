@@ -25,7 +25,7 @@ def create_challenge(
     Create a new challenge.
     """
     now = datetime.now().isoformat()
-    challenge_dict = challenge_data.dict()
+    challenge_dict = challenge_data.model_dump_json_safe()
     
     # Handle None values for optional fields
     if challenge_dict.get("check_in_time") is not None:
@@ -222,7 +222,8 @@ def get_challenge(
         **challenge,
         "creator": creator,
         "participant_count": participants_count.count if hasattr(participants_count, 'count') else 0,
-        "posts_count": posts_count.count if hasattr(posts_count, 'count') else 0,
+        "posts_count": posts_count.count if hasattr(posts_count, 'count') 
+        else 0,
         "is_joined": is_joined,
     }
     
@@ -820,13 +821,13 @@ def get_trending_challenges(
                 continue
         
         # Get recent participants count
-        from_date = datetime.utcnow()
+        from_date = datetime.now()
         if time_period == "day":
-            from_date = (from_date - datetime.timedelta(days=1)).isoformat()
+            from_date = (from_date - datetime.timedelta(days=1))
         elif time_period == "week":
-            from_date = (from_date - datetime.timedelta(weeks=1)).isoformat()
+            from_date = (from_date - datetime.timedelta(weeks=1))
         elif time_period == "month":
-            from_date = (from_date - datetime.timedelta(days=30)).isoformat()
+            from_date = (from_date - datetime.timedelta(days=30))
         
         # Count recent participants (simplified as Supabase filter capabilities vary)
         participants_all = db.table("challenge_participants") \
@@ -836,7 +837,7 @@ def get_trending_challenges(
         
         recent_participants = 0
         if participants_all.data:
-            recent_participants = sum(1 for p in participants_all.data if p["joined_at"] > from_date)
+            recent_participants = sum(1 for p in participants_all.data if p["joined_at"] > from_date.isoformat())
         
         # Count recent posts
         posts_all = db.table("challenge_posts") \
@@ -846,7 +847,7 @@ def get_trending_challenges(
         
         recent_posts = 0
         if posts_all.data:
-            recent_posts = sum(1 for p in posts_all.data if p["submitted_at"] > from_date)
+            recent_posts = sum(1 for p in posts_all.data if p["submitted_at"] > from_date.isoformat())
         
         # Calculate trending score (simple algorithm - can be refined)
         trend_score = (recent_participants * 3) + recent_posts
@@ -960,16 +961,37 @@ def update_participant_status(
     
     # If status is completed, create an achievement
     if status == "completed":
-        now = datetime.utcnow().isoformat()
+        # Get challenge data to use its title
+        challenge_data = db.table("challenges").select("*").eq("id", str(challenge_id)).execute()
+        if not challenge_data.data or len(challenge_data.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Challenge with ID {challenge_id} not found",
+            )
+        challenge = challenge_data.data[0]
+        
+        now = datetime.now().isoformat()
         achievement_data = {
             "challenge_id": str(challenge_id),
             "user_id": str(current_user.id),
             "achievement_type": "completion",
-            "description": "Completed the challenge",
+            "description": f"Completed the challenge: {challenge['title']}",
             "achieved_at": now,
         }
         
         db.table("challenge_achievements").insert(achievement_data).execute()
+        
+        # Create notification for achievement
+        notification_dict = {
+            "user_id": str(current_user.id),
+            "triggered_by_user_id": str(current_user.id),  # Self-triggered
+            "challenge_id": str(challenge_id),
+            "type": "achievement",
+            "message": f"Congratulations! You completed the challenge: {challenge['title']}",
+            "created_at": now,
+        }
+        
+        db.table("notifications").insert(notification_dict).execute()
     
     return ChallengeParticipant(**result.data[0])
 
@@ -1001,4 +1023,87 @@ def get_user_achievements(
     if not achievements.data:
         return []
     
-    return [ChallengeAchievement(**achievement) for achievement in achievements.data] 
+    return [ChallengeAchievement(**achievement) for achievement in achievements.data]
+
+
+@router.post("/achievement", response_model=ChallengeAchievement)
+def add_achievement(
+    challenge_id: UUID,
+    achievement_type: str,
+    description: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Client = Depends(get_supabase),
+) -> Any:
+    """
+    Add a new achievement for a user in a specific challenge.
+    """
+    # Check if challenge exists
+    challenge_data = db.table("challenges").select("*").eq("id", str(challenge_id)).execute()
+    
+    if not challenge_data.data or len(challenge_data.data) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Challenge with ID {challenge_id} not found",
+        )
+    
+    challenge = challenge_data.data[0]
+    
+    # Check if user is the creator
+    if challenge["creator_id"] != str(current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to add an achievement to this challenge",
+        )
+    
+    # Create achievement
+    now = datetime.now().isoformat()
+    achievement_data = {
+        "challenge_id": str(challenge_id),
+        "user_id": str(current_user.id),
+        "achievement_type": achievement_type,
+        "description": description,
+        "achieved_at": now,
+    }
+    
+    result = db.table("challenge_achievements").insert(achievement_data).execute()
+    
+    if not result.data or len(result.data) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to add achievement",
+        )
+    
+    return ChallengeAchievement(**result.data[0])
+
+
+@router.delete("/achievement", response_model=dict)
+def delete_achievement(
+    achievement_id: UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: Client = Depends(get_supabase),
+) -> Any:
+    """
+    Delete an achievement for a user.
+    """
+    # Check if achievement exists
+    achievement_data = db.table("challenge_achievements").select("*").eq("id", str(achievement_id)).execute()
+    
+    if not achievement_data.data or len(achievement_data.data) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Achievement with ID {achievement_id} not found",
+        )
+    
+    achievement = achievement_data.data[0]
+    
+    # Check if user is the creator
+    if achievement["user_id"] != str(current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to delete this achievement",
+        )
+    
+    # Delete the achievement
+    db.table("challenge_achievements").delete().eq("id", str(achievement_id)).execute()
+    
+    return {"message": "Achievement deleted successfully"} 

@@ -58,7 +58,7 @@ def create_like(
         )
     
     # Create like
-    now = datetime.utcnow().isoformat()
+    now = datetime.now().isoformat()
     like_dict = {
         "user_id": str(current_user.id),
         "created_at": now,

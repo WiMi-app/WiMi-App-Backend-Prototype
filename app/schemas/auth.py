@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 
 
 class TokenData(BaseModel):
@@ -14,7 +14,14 @@ class TokenData(BaseModel):
 
 class TokenPayload(BaseModel):
     sub: Optional[UUID] = None
-    exp: Optional[datetime] = None
+    exp: Optional[float] = None  # Using float for timestamp
+    
+    @field_validator('exp')
+    def validate_exp(cls, v):
+        # Handle both timestamp and datetime formats
+        if isinstance(v, datetime):
+            return v.timestamp()
+        return v
 
 
 class LoginRequest(BaseModel):

@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from uuid import UUID
 
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, Field
 
 from app.schemas.users import User
 from app.schemas.hashtags import Hashtag
@@ -10,18 +10,18 @@ from app.schemas.hashtags import Hashtag
 
 class PostBase(BaseModel):
     content: str
-    media_urls: Optional[List[HttpUrl]] = []
+    media_urls: Optional[List[str]] = []
     location: Optional[str] = None
     is_private: bool = False
 
 
 class PostCreate(PostBase):
-    pass
+    image_metadata: Optional[Dict[str, Any]] = None
 
 
 class PostUpdate(BaseModel):
     content: Optional[str] = None
-    media_urls: Optional[List[HttpUrl]] = None
+    media_urls: Optional[List[str]] = None
     location: Optional[str] = None
     is_private: Optional[bool] = None
 

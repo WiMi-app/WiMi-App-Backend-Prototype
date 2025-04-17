@@ -7,6 +7,7 @@ A production-ready FastAPI and Supabase-based backend for a social media applica
 - **User Authentication**: Registration, login, JWT-based token authentication
 - **User Profiles**: Update profile information, follow/unfollow users
 - **Posts**: Create, read, update, delete posts
+- **Real-Time Photo Posting**: Posts require photos captured in real-time, not from photo albums
 - **Social Interactions**: Like/unlike posts and comments
 - **Hashtags**: Automatic hashtag extraction from post content
 - **Saved Posts**: Save and unsave posts for later viewing
@@ -103,7 +104,7 @@ API documentation is automatically generated at:
 - `DELETE /api/v1/users/unfollow/{user_id}`: Unfollow a user
 
 ### Posts
-- `POST /api/v1/posts/`: Create a new post
+- `POST /api/v1/posts/`: Create a new post with a real-time photo
 - `GET /api/v1/posts/`: Get all posts with optional filtering
 - `GET /api/v1/posts/{post_id}`: Get a specific post
 - `PUT /api/v1/posts/{post_id}`: Update a post
@@ -115,6 +116,57 @@ API documentation is automatically generated at:
 - `POST /api/v1/likes/`: Like a post or comment
 - `DELETE /api/v1/likes/post/{post_id}`: Unlike a post
 - `DELETE /api/v1/likes/comment/{comment_id}`: Unlike a comment
+
+## Real-Time Photo Posting
+
+WiMi enforces real-time photo posting, meaning users can only post photos taken in the moment rather than from their photo album or gallery. This encourages authentic, in-the-moment sharing.
+
+### How It Works
+
+1. When a user takes a photo in the app, the client captures metadata including:
+   - Precise capture timestamp
+   - Device information
+   - Camera information
+   - Optional location data
+
+2. This metadata is sent along with the post content to the server.
+
+3. The server validates that:
+   - The `is_real_time` flag is set to true
+   - The photo's capture timestamp is within 60 seconds of the current time
+
+4. If validation passes, the post is created with the real-time photo. If validation fails, the request is rejected.
+
+### API Request Example
+
+```json
+POST /api/v1/posts/
+
+{
+  "content": "Beautiful sunset! #nofilter",
+  "media_urls": ["https://example.com/image.jpg"],
+  "location": "San Francisco, CA",
+  "is_private": false,
+  "is_real_time": true,
+  "image_metadata": {
+    "capture_timestamp": "2023-08-15T19:45:30.123456",
+    "device_info": {
+      "model": "iPhone 12",
+      "os": "iOS 15.5",
+      "app_version": "1.2.3"
+    },
+    "camera_info": {
+      "resolution": "12MP",
+      "camera_type": "back"
+    },
+    "location_data": {
+      "latitude": 37.7749,
+      "longitude": -122.4194,
+      "accuracy": 10.0
+    }
+  }
+}
+```
 
 ## Deployment
 
