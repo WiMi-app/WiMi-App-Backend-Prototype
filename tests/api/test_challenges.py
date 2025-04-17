@@ -347,6 +347,12 @@ def test_join_challenge(second_test_user, test_challenge):
     """
     headers = {"Authorization": f"Bearer {second_test_user['token']}"}
     
+    # Clean up any existing participation records before test
+    supabase.table("challenge_participants").delete() \
+        .eq("challenge_id", test_challenge["id"]) \
+        .eq("user_id", second_test_user["id"]) \
+        .execute()
+    
     join_data = {
         "challenge_id": test_challenge["id"]
     }
@@ -373,6 +379,12 @@ def test_join_challenge(second_test_user, test_challenge):
     
     assert participant.data
     assert len(participant.data) > 0
+    
+    # Clean up after test
+    supabase.table("challenge_participants").delete() \
+        .eq("challenge_id", test_challenge["id"]) \
+        .eq("user_id", second_test_user["id"]) \
+        .execute()
 
 
 def test_leave_challenge(second_test_user, test_challenge):
@@ -390,6 +402,26 @@ def test_leave_challenge(second_test_user, test_challenge):
     """
     headers = {"Authorization": f"Bearer {second_test_user['token']}"}
     
+    # Clean up any existing participation records before test
+    supabase.table("challenge_participants").delete() \
+        .eq("challenge_id", test_challenge["id"]) \
+        .eq("user_id", second_test_user["id"]) \
+        .execute()
+    
+    # First join the challenge
+    join_data = {
+        "challenge_id": test_challenge["id"]
+    }
+    
+    join_response = client.post(
+        "/api/v1/challenges/join",
+        headers=headers,
+        json=join_data
+    )
+    
+    assert join_response.status_code == 200
+    
+    # Now leave the challenge
     response = client.delete(
         f"/api/v1/challenges/leave/{test_challenge['id']}",
         headers=headers
@@ -409,6 +441,12 @@ def test_leave_challenge(second_test_user, test_challenge):
         .execute()
     
     assert not participant.data or len(participant.data) == 0
+    
+    # Clean up any remaining data just in case
+    supabase.table("challenge_participants").delete() \
+        .eq("challenge_id", test_challenge["id"]) \
+        .eq("user_id", second_test_user["id"]) \
+        .execute()
 
 
 def test_delete_challenge(test_user, test_challenge):
@@ -521,6 +559,18 @@ def test_update_participant_status(second_test_user, test_challenge):
     """
     headers = {"Authorization": f"Bearer {second_test_user['token']}"}
     
+    # Clean up any existing participation records before test
+    supabase.table("challenge_participants").delete() \
+        .eq("challenge_id", test_challenge["id"]) \
+        .eq("user_id", second_test_user["id"]) \
+        .execute()
+    
+    # Clean up any existing achievements before test
+    supabase.table("challenge_achievements").delete() \
+        .eq("challenge_id", test_challenge["id"]) \
+        .eq("user_id", second_test_user["id"]) \
+        .execute()
+    
     # Join the challenge first
     join_data = {
         "challenge_id": test_challenge["id"]
@@ -554,4 +604,15 @@ def test_update_participant_status(second_test_user, test_challenge):
     
     assert achievements.data
     assert len(achievements.data) > 0
-    assert achievements.data[0]["achievement_type"] == "completion" 
+    assert achievements.data[0]["achievement_type"] == "completion"
+    
+    # Clean up after test
+    supabase.table("challenge_participants").delete() \
+        .eq("challenge_id", test_challenge["id"]) \
+        .eq("user_id", second_test_user["id"]) \
+        .execute()
+    
+    supabase.table("challenge_achievements").delete() \
+        .eq("challenge_id", test_challenge["id"]) \
+        .eq("user_id", second_test_user["id"]) \
+        .execute() 

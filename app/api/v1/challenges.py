@@ -313,7 +313,7 @@ def delete_challenge(
     # Delete the challenge (cascade should handle related records)
     db.table("challenges").delete().eq("id", str(challenge_id)).execute()
     
-    return {"message": "Challenge deleted successfully"}
+    return {"message": "Challenge deleted successfully", "status": "success"}
 
 
 @router.post("/join", response_model=ChallengeParticipant)
@@ -424,7 +424,7 @@ def leave_challenge(
         .eq("user_id", str(current_user.id)) \
         .execute()
     
-    return {"message": "You have left the challenge successfully"}
+    return {"message": "You have left the challenge successfully", "status": "success"}
 
 
 @router.post("/post", response_model=ChallengePost)
@@ -910,13 +910,23 @@ def get_trending_challenges(
 @router.put("/participant/status", response_model=ChallengeParticipant)
 def update_participant_status(
     challenge_id: UUID,
-    participant_status: str = Query(..., description="Status of the participant (active, completed, dropped)"),
+    status: str = Query(None, description="Status of the participant (active, completed, dropped)"),
+    participant_status: str = Query(None, description="Alternative name for status parameter (active, completed, dropped)"),
     current_user: User = Depends(get_current_active_user),
     db: Client = Depends(get_supabase),
 ) -> Any:
     """
     Update the status of a challenge participant (active, completed, dropped).
     """
+    # Use participant_status if provided, otherwise use status
+    final_status = participant_status if participant_status is not None else status
+    
+    if final_status is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either 'status' or 'participant_status' parameter must be provided",
+        )
+    
     # Check if challenge exists
     challenge_data = db.table("challenges").select("*").eq("id", str(challenge_id)).execute()
     
@@ -942,7 +952,7 @@ def update_participant_status(
         )
     
     # Check if status is valid
-    if participant_status not in ["active", "completed", "dropped"]:
+    if final_status not in ["active", "completed", "dropped"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid status. Must be one of: active, completed, dropped",
@@ -950,7 +960,7 @@ def update_participant_status(
     
     # Update status
     result = db.table("challenge_participants") \
-        .update({"status": participant_status}) \
+        .update({"status": final_status}) \
         .eq("challenge_id", str(challenge_id)) \
         .eq("user_id", str(current_user.id)) \
         .execute()
@@ -962,7 +972,7 @@ def update_participant_status(
         )
     
     # If status is completed, create an achievement
-    if participant_status == "completed":
+    if final_status == "completed":
         now = get_utc_now()
         achievement_data = {
             "challenge_id": str(challenge_id),
@@ -1087,4 +1097,4 @@ def delete_achievement(
     # Delete the achievement
     db.table("challenge_achievements").delete().eq("id", str(achievement_id)).execute()
     
-    return {"message": "Achievement deleted successfully"} 
+    return {"message": "Achievement deleted successfully", "status": "success"} 
