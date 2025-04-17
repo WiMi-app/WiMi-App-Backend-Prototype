@@ -24,7 +24,7 @@ supabase: Client = create_client(
 def test_user():
     """Create a test user and return credentials"""
     username = f"testuser_{uuid.uuid4().hex[:8]}"
-    email = "wimiapp.official@gmail.com"
+    email = f"{username}@example.com"  # Use unique email based on username
     password = "testpassword123"
     
     # Create user data
@@ -72,7 +72,7 @@ def test_user():
 def second_test_user():
     """Create a second test user for testing interactions"""
     username = f"testuser2_{uuid.uuid4().hex[:8]}"
-    email = "wimiapp.official@gmail.com"
+    email = f"{username}@example.com"  # Use unique email based on username
     password = "testpassword123"
     
     # Create user data

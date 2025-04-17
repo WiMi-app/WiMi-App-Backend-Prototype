@@ -274,6 +274,12 @@ def test_follow_user(test_user, second_test_user):
     """Test following another user"""
     headers = {"Authorization": f"Bearer {test_user['token']}"}
     
+    # Make sure no follow relationship exists before starting
+    supabase.table("follows").delete() \
+        .eq("follower_id", test_user["id"]) \
+        .eq("followed_id", second_test_user["id"]) \
+        .execute()
+    
     follow_data = {
         "followed_id": second_test_user["id"]
     }
@@ -290,11 +296,23 @@ def test_follow_user(test_user, second_test_user):
     assert data["follower_id"] == test_user["id"]
     assert data["followed_id"] == second_test_user["id"]
     assert "created_at" in data
+    
+    # Clean up: delete the follow relationship
+    supabase.table("follows").delete() \
+        .eq("follower_id", test_user["id"]) \
+        .eq("followed_id", second_test_user["id"]) \
+        .execute()
 
 
 def test_follow_already_following(test_user, second_test_user):
     """Test following a user that is already being followed"""
     headers = {"Authorization": f"Bearer {test_user['token']}"}
+    
+    # Make sure no follow relationship exists before starting
+    supabase.table("follows").delete() \
+        .eq("follower_id", test_user["id"]) \
+        .eq("followed_id", second_test_user["id"]) \
+        .execute()
     
     # First follow the user
     follow_data = {
@@ -318,11 +336,23 @@ def test_follow_already_following(test_user, second_test_user):
     
     assert second_response.status_code == 400
     assert "Already following this user" in second_response.json()["detail"]
+    
+    # Clean up: delete the follow relationship
+    supabase.table("follows").delete() \
+        .eq("follower_id", test_user["id"]) \
+        .eq("followed_id", second_test_user["id"]) \
+        .execute()
 
 
 def test_unfollow_user(test_user, second_test_user):
     """Test unfollowing a user"""
     headers = {"Authorization": f"Bearer {test_user['token']}"}
+    
+    # Make sure no follow relationship exists before starting
+    supabase.table("follows").delete() \
+        .eq("follower_id", test_user["id"]) \
+        .eq("followed_id", second_test_user["id"]) \
+        .execute()
     
     # First follow the user
     follow_data = {
@@ -353,4 +383,10 @@ def test_unfollow_user(test_user, second_test_user):
         json=follow_data
     )
     
-    assert follow_again_response.status_code == 200 
+    assert follow_again_response.status_code == 200
+    
+    # Clean up: delete the follow relationship
+    supabase.table("follows").delete() \
+        .eq("follower_id", test_user["id"]) \
+        .eq("followed_id", second_test_user["id"]) \
+        .execute() 

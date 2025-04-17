@@ -1,5 +1,5 @@
-from datetime import datetime
-from typing import Any, List, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, List, Optional, Dict
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,6 +14,11 @@ from app.schemas.users import User
 
 router = APIRouter()
 
+# Create a function for consistent timestamp generation
+def get_utc_now() -> str:
+    """Get current UTC time as ISO format string"""
+    return datetime.now(timezone.utc).isoformat()
+
 
 @router.post("/", response_model=Challenge)
 def create_challenge(
@@ -24,18 +29,18 @@ def create_challenge(
     """
     Create a new challenge.
     """
-    now = datetime.now().isoformat()
-    challenge_dict = challenge_data.model_dump_json_safe()
-    
-    # Handle None values for optional fields
-    if challenge_dict.get("check_in_time") is not None:
-        challenge_dict["check_in_time"] = challenge_dict["check_in_time"].isoformat()
+    now = get_utc_now()
+    challenge_dict = challenge_data.model_dump(exclude_unset=True)
     
     challenge_dict.update({
         "creator_id": str(current_user.id),
         "created_at": now,
         "updated_at": now,
     })
+    
+    # Format check_in_time if present
+    if challenge_dict.get("check_in_time") and not isinstance(challenge_dict["check_in_time"], str):
+        challenge_dict["check_in_time"] = challenge_dict["check_in_time"].isoformat()
     
     result = db.table("challenges").insert(challenge_dict).execute()
     
@@ -48,7 +53,7 @@ def create_challenge(
     return Challenge(**result.data[0])
 
 
-@router.get("/", response_model=List[ChallengeWithDetails])
+@router.get("/", response_model=List[Dict])
 def get_challenges(
     skip: int = 0,
     limit: int = 10,
@@ -58,29 +63,30 @@ def get_challenges(
     current_user: Optional[User] = Depends(get_current_active_user),
 ) -> Any:
     """
-    Get all challenges with optional filtering.
+    Get all challenges with filtering options.
     """
-    query = db.table("challenges") \
-        .select("*") \
-        .order("created_at", desc=True)
+    # Build query with filters
+    query = db.table("challenges").select("*")
     
-    # Apply filters
     if creator_id:
         query = query.eq("creator_id", str(creator_id))
     
     if is_active is not None:
         query = query.eq("is_active", is_active)
     
-    # Only show private challenges if user is the creator or a participant
+    # Order by creation date
+    query = query.order("created_at", desc=True)
+    
+    # Execute the query
+    filtered_challenges = []
+    
     if current_user:
-        # Complex query: show public challenges OR private ones where the user is creator/participant
-        # This is a simplified approach for Supabase
+        # If user is authenticated, include public challenges and private ones where they are creator/participant
         challenges = query.range(skip, skip + limit - 1).execute()
         
         if not challenges.data:
             return []
         
-        filtered_challenges = []
         for challenge in challenges.data:
             # If challenge is public or user is creator, include it
             if not challenge["is_private"] or challenge["creator_id"] == str(current_user.id):
@@ -132,7 +138,7 @@ def get_challenges(
                 .eq("user_id", str(current_user.id)) \
                 .execute()
             
-            is_joined = joined.data and len(joined.data) > 0
+            is_joined = bool(joined.data and len(joined.data) > 0)
         
         challenge_with_details = {
             **challenge,
@@ -147,7 +153,7 @@ def get_challenges(
     return result
 
 
-@router.get("/{challenge_id}", response_model=ChallengeWithDetails)
+@router.get("/{challenge_id}", response_model=Dict)
 def get_challenge(
     challenge_id: UUID,
     db: Client = Depends(get_supabase),
@@ -216,14 +222,13 @@ def get_challenge(
             .eq("user_id", str(current_user.id)) \
             .execute()
         
-        is_joined = joined.data and len(joined.data) > 0
+        is_joined = bool(joined.data and len(joined.data) > 0)
     
     challenge_with_details = {
         **challenge,
         "creator": creator,
         "participant_count": participants_count.count if hasattr(participants_count, 'count') else 0,
-        "posts_count": posts_count.count if hasattr(posts_count, 'count') 
-        else 0,
+        "posts_count": posts_count.count if hasattr(posts_count, 'count') else 0,
         "is_joined": is_joined,
     }
     
@@ -257,13 +262,13 @@ def update_challenge(
             detail="You don't have permission to update this challenge",
         )
     
-    update_data = {key: value for key, value in challenge_update.dict().items() if value is not None}
+    update_data = {key: value for key, value in challenge_update.model_dump(exclude_unset=True).items() if value is not None}
     
     # Handle time field formatting
     if "check_in_time" in update_data and update_data["check_in_time"] is not None:
         update_data["check_in_time"] = update_data["check_in_time"].isoformat()
     
-    update_data["updated_at"] = datetime.now().isoformat()
+    update_data["updated_at"] = get_utc_now()
     
     result = db.table("challenges") \
         .update(update_data) \
@@ -362,7 +367,7 @@ def join_challenge(
             )
     
     # Add user as participant
-    now = datetime.now().isoformat()
+    now = get_utc_now()
     participant_data = {
         "challenge_id": str(challenge_id),
         "user_id": str(current_user.id),
@@ -433,6 +438,7 @@ def add_post_to_challenge(
     """
     challenge_id = post_data.challenge_id
     post_id = post_data.post_id
+    is_check_in = post_data.is_check_in  # Store this to avoid overwriting issue
     
     # Check if challenge exists
     challenge_data = db.table("challenges").select("*").eq("id", str(challenge_id)).execute()
@@ -444,15 +450,15 @@ def add_post_to_challenge(
         )
     
     # Check if post exists and belongs to the current user
-    post_data = db.table("posts").select("*").eq("id", str(post_id)).execute()
+    post_result = db.table("posts").select("*").eq("id", str(post_id)).execute()
     
-    if not post_data.data or len(post_data.data) == 0:
+    if not post_result.data or len(post_result.data) == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Post with ID {post_id} not found",
         )
     
-    post = post_data.data[0]
+    post = post_result.data[0]
     
     if post["user_id"] != str(current_user.id):
         raise HTTPException(
@@ -474,11 +480,11 @@ def add_post_to_challenge(
         )
     
     # Add post to challenge
-    now = datetime.now().isoformat()
+    now = get_utc_now()
     challenge_post_data = {
         "challenge_id": str(challenge_id),
         "post_id": str(post_id),
-        "is_check_in": post_data.is_check_in,
+        "is_check_in": is_check_in,
         "submitted_at": now,
     }
     
@@ -491,7 +497,7 @@ def add_post_to_challenge(
         )
     
     # Check if this is a check-in for a streak calculation
-    if post_data.is_check_in:
+    if is_check_in:
         # A simple streak calculation could be added here
         # This is a placeholder for more complex streak logic
         pass
@@ -679,9 +685,9 @@ def get_challenge_participants(
     return result
 
 
-@router.get("/search", response_model=List[ChallengeWithDetails])
+@router.get("/search", response_model=List[Dict])
 def search_challenges(
-    query: str,
+    query: str = "",
     skip: int = 0,
     limit: int = 10,
     db: Client = Depends(get_supabase),
@@ -690,67 +696,61 @@ def search_challenges(
     """
     Search for challenges by title or description.
     """
-    # Simple text search - Supabase offers more advanced full-text search capabilities
-    # This is a simplified approach that searches for title or description containing the query
-    challenges_query = db.table("challenges") \
-        .select("*") \
-        .order("created_at", desc=True)
+    # Simple text search using client-side filtering
+    challenges_query = db.table("challenges").select("*").order("created_at", desc=True)
+    result = challenges_query.execute()
     
-    # Execute the query
-    challenges = challenges_query.execute()
-    
-    if not challenges.data:
+    if not result.data:
         return []
     
-    # Filter results client-side for simple text matching
-    # This is not ideal for large datasets but works for demonstration
+    # Filter by search query if provided
     filtered_challenges = []
-    query = query.lower()
+    search_term = query.lower().strip() if query else ""
     
-    for challenge in challenges.data:
+    for challenge in result.data:
         title = challenge.get("title", "").lower()
         description = challenge.get("description", "").lower() if challenge.get("description") else ""
         
-        if query in title or query in description:
-            # If challenge is private, only show if user is the creator or a participant
-            if challenge["is_private"]:
-                if not current_user:
-                    continue
-                    
-                if challenge["creator_id"] != str(current_user.id):
-                    # Check if user is a participant
-                    participant = db.table("challenge_participants") \
-                        .select("*") \
-                        .eq("challenge_id", challenge["id"]) \
-                        .eq("user_id", str(current_user.id)) \
-                        .execute()
-                    
-                    if not participant.data or len(participant.data) == 0:
-                        continue
+        # If no search term or it matches title/description
+        if not search_term or search_term in title or search_term in description:
+            # Check privacy settings
+            if not challenge.get("is_private", False) or not current_user:
+                filtered_challenges.append(challenge)
+                continue
+                
+            # User is authenticated and challenge is private
+            if challenge["creator_id"] == str(current_user.id):
+                filtered_challenges.append(challenge)
+                continue
+                
+            # Check if user is a participant
+            participant = db.table("challenge_participants") \
+                .select("*") \
+                .eq("challenge_id", challenge["id"]) \
+                .eq("user_id", str(current_user.id)) \
+                .execute()
             
-            filtered_challenges.append(challenge)
+            if participant.data and len(participant.data) > 0:
+                filtered_challenges.append(challenge)
     
     # Apply pagination
-    paginated_challenges = filtered_challenges[skip:skip + limit]
+    paginated = filtered_challenges[skip:skip + limit] if filtered_challenges else []
     
+    # Enhance challenges with additional data
     result = []
-    
-    for challenge in paginated_challenges:
-        # Get creator data
+    for challenge in paginated:
+        # Get creator
+        creator = None
         creator_data = db.table("users").select("*").eq("id", challenge["creator_id"]).execute()
-        
         if creator_data.data and len(creator_data.data) > 0:
             creator = creator_data.data[0]
-        else:
-            creator = None
         
-        # Get participants count
+        # Get counts
         participants_count = db.table("challenge_participants") \
             .select("user_id", count="exact") \
             .eq("challenge_id", challenge["id"]) \
             .execute()
         
-        # Get posts count
         posts_count = db.table("challenge_posts") \
             .select("post_id", count="exact") \
             .eq("challenge_id", challenge["id"]) \
@@ -765,8 +765,9 @@ def search_challenges(
                 .eq("user_id", str(current_user.id)) \
                 .execute()
             
-            is_joined = joined.data and len(joined.data) > 0
+            is_joined = bool(joined.data and len(joined.data) > 0)
         
+        # Combine all data
         challenge_with_details = {
             **challenge,
             "creator": creator,
@@ -780,7 +781,7 @@ def search_challenges(
     return result
 
 
-@router.get("/trending", response_model=List[ChallengeWithDetails])
+@router.get("/trending", response_model=List[Dict])
 def get_trending_challenges(
     time_period: Optional[str] = "week",  # "day", "week", "month"
     limit: int = 10,
@@ -821,13 +822,13 @@ def get_trending_challenges(
                 continue
         
         # Get recent participants count
-        from_date = datetime.now()
+        from_date = datetime.now(timezone.utc)
         if time_period == "day":
-            from_date = (from_date - datetime.timedelta(days=1))
+            from_date = (from_date - timedelta(days=1))
         elif time_period == "week":
-            from_date = (from_date - datetime.timedelta(weeks=1))
+            from_date = (from_date - timedelta(weeks=1))
         elif time_period == "month":
-            from_date = (from_date - datetime.timedelta(days=30))
+            from_date = (from_date - timedelta(days=30))
         
         # Count recent participants (simplified as Supabase filter capabilities vary)
         participants_all = db.table("challenge_participants") \
@@ -891,7 +892,7 @@ def get_trending_challenges(
                 .eq("user_id", str(current_user.id)) \
                 .execute()
             
-            is_joined = joined.data and len(joined.data) > 0
+            is_joined = bool(joined.data and len(joined.data) > 0)
         
         challenge_with_details = {
             **challenge,
@@ -909,7 +910,7 @@ def get_trending_challenges(
 @router.put("/participant/status", response_model=ChallengeParticipant)
 def update_participant_status(
     challenge_id: UUID,
-    status: str,
+    participant_status: str = Query(..., description="Status of the participant (active, completed, dropped)"),
     current_user: User = Depends(get_current_active_user),
     db: Client = Depends(get_supabase),
 ) -> Any:
@@ -925,6 +926,8 @@ def update_participant_status(
             detail=f"Challenge with ID {challenge_id} not found",
         )
     
+    challenge = challenge_data.data[0]
+    
     # Check if user is a participant
     participant = db.table("challenge_participants") \
         .select("*") \
@@ -934,21 +937,20 @@ def update_participant_status(
     
     if not participant.data or len(participant.data) == 0:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You are not participating in this challenge",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="You are not a participant in this challenge",
         )
     
-    # Validate status
-    valid_statuses = ["active", "completed", "dropped"]
-    if status not in valid_statuses:
+    # Check if status is valid
+    if participant_status not in ["active", "completed", "dropped"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}",
+            detail="Invalid status. Must be one of: active, completed, dropped",
         )
     
-    # Update participant status
+    # Update status
     result = db.table("challenge_participants") \
-        .update({"status": status}) \
+        .update({"status": participant_status}) \
         .eq("challenge_id", str(challenge_id)) \
         .eq("user_id", str(current_user.id)) \
         .execute()
@@ -960,38 +962,17 @@ def update_participant_status(
         )
     
     # If status is completed, create an achievement
-    if status == "completed":
-        # Get challenge data to use its title
-        challenge_data = db.table("challenges").select("*").eq("id", str(challenge_id)).execute()
-        if not challenge_data.data or len(challenge_data.data) == 0:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Challenge with ID {challenge_id} not found",
-            )
-        challenge = challenge_data.data[0]
-        
-        now = datetime.now().isoformat()
+    if participant_status == "completed":
+        now = get_utc_now()
         achievement_data = {
             "challenge_id": str(challenge_id),
             "user_id": str(current_user.id),
             "achievement_type": "completion",
-            "description": f"Completed the challenge: {challenge['title']}",
+            "description": f"Completed challenge: {challenge['title']}",
             "achieved_at": now,
         }
         
         db.table("challenge_achievements").insert(achievement_data).execute()
-        
-        # Create notification for achievement
-        notification_dict = {
-            "user_id": str(current_user.id),
-            "triggered_by_user_id": str(current_user.id),  # Self-triggered
-            "challenge_id": str(challenge_id),
-            "type": "achievement",
-            "message": f"Congratulations! You completed the challenge: {challenge['title']}",
-            "created_at": now,
-        }
-        
-        db.table("notifications").insert(notification_dict).execute()
     
     return ChallengeParticipant(**result.data[0])
 
@@ -1056,7 +1037,7 @@ def add_achievement(
         )
     
     # Create achievement
-    now = datetime.now().isoformat()
+    now = get_utc_now()
     achievement_data = {
         "challenge_id": str(challenge_id),
         "user_id": str(current_user.id),

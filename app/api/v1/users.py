@@ -231,7 +231,7 @@ def unfollow_user(
         .eq("followed_id", str(user_id)) \
         .execute()
     
-    return {"message": "Successfully unfollowed user"}
+    return {"message": "Successfully unfollowed user", "status": "success"}
 
 
 @router.get("/{username}/created-challenges", response_model=List[dict])

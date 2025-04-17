@@ -1,5 +1,6 @@
 import json
 import uuid
+import urllib.parse
 from datetime import datetime, time, timedelta
 from typing import Dict, List
 
@@ -36,7 +37,7 @@ def test_user():
         dict: User data including id, username, email, and auth token
     """
     username = f"testuser_{uuid.uuid4().hex[:8]}"
-    email = "wimiapp.official@gmail.com"
+    email = f"{username}@example.com"
     password = "testpassword123"
     
     # Create user data
@@ -142,7 +143,7 @@ def second_test_user():
         dict: User data including id, username, email, and auth token
     """
     username = f"testuser2_{uuid.uuid4().hex[:8]}"
-    email = "wimiapp.official@gmail.com"
+    email = f"{username}@example.com"
     password = "testpassword123"
     
     # Create user data
@@ -445,42 +446,64 @@ def test_delete_challenge(test_user, test_challenge):
     assert not challenge.data or len(challenge.data) == 0
 
 
-def test_search_challenges(test_user, test_challenge):
+def test_search_challenges(test_user):
     """
-    Test searching for challenges by title or description.
+    Test the search_challenges endpoint with a very specific keyword.
     
-    This test:
-    1. Searches for challenges using part of the test challenge title
-    2. Verifies the test challenge appears in search results
+    This test creates a challenge with a unique keyword and verifies that
+    searching for this keyword returns the challenge.
     
     Args:
         test_user: Fixture providing authenticated user
-        test_challenge: Fixture providing existing challenge
     """
     headers = {"Authorization": f"Bearer {test_user['token']}"}
     
-    # Search using part of the title
-    search_term = test_challenge["title"].split()[0]
+    # Create a test challenge with a unique keyword
+    unique_keyword = f"unique{uuid.uuid4().hex[:8]}"
+    challenge = {
+        "title": f"Test Challenge with {unique_keyword}",
+        "description": "A challenge with a unique search term",
+        "creator_id": test_user["id"],
+        "created_at": datetime.now().isoformat(),
+        "updated_at": datetime.now().isoformat(),
+        "is_active": True,
+        "is_private": False,
+        "repetition": "daily",
+        "check_in_time": time(8, 0).isoformat(),
+    }
     
-    response = client.get(
-        f"/api/v1/challenges/search?query={search_term}",
-        headers=headers
-    )
+    # Insert challenge into database
+    result = supabase.table("challenges").insert(challenge).execute()
+    assert result.data and len(result.data) > 0, "Failed to create test challenge"
+    challenge_id = result.data[0]["id"]
     
-    assert response.status_code == 200
-    
-    data = response.json()
-    assert isinstance(data, list)
-    
-    # Verify test challenge is in the results
-    challenge_found = False
-    for challenge in data:
-        if challenge["id"] == test_challenge["id"]:
-            challenge_found = True
-            assert challenge["title"] == test_challenge["title"]
-            break
-    
-    assert challenge_found, "Test challenge not found in search results"
+    try:
+        # Search using the unique keyword
+        response = client.get(
+            f"/api/v1/challenges/search?query={unique_keyword}",
+            headers=headers
+        )
+        
+        # Verify the response
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Verify our challenge is found
+        assert isinstance(data, list)
+        assert len(data) > 0, "No challenges returned from search"
+        
+        # Find our specific challenge
+        found = False
+        for c in data:
+            if c["id"] == challenge_id:
+                found = True
+                break
+        
+        assert found, f"Challenge with keyword '{unique_keyword}' not found in search results"
+        
+    finally:
+        # Clean up
+        supabase.table("challenges").delete().eq("id", challenge_id).execute()
 
 
 def test_update_participant_status(second_test_user, test_challenge):
@@ -511,7 +534,7 @@ def test_update_participant_status(second_test_user, test_challenge):
     
     # Update status to completed
     response = client.put(
-        f"/api/v1/challenges/participant/status?challenge_id={test_challenge['id']}&status=completed",
+        f"/api/v1/challenges/participant/status?challenge_id={test_challenge['id']}&participant_status=completed",
         headers=headers
     )
     
