@@ -4,6 +4,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.v1 import api_router
 from app.core.config import settings
+from app.core.middleware import APIUsageMiddleware
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -24,6 +25,9 @@ app.add_middleware(
 
 # Add GZip compression
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Add API usage tracking middleware
+app.add_middleware(APIUsageMiddleware)
 
 # Include API router
 app.include_router(api_router, prefix=settings.API_V1_STR)

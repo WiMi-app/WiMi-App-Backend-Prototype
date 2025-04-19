@@ -71,6 +71,16 @@ def get_current_active_user(current_user: User = Depends(get_current_user)) -> U
     return current_user
 
 
+async def check_if_admin(current_user: User = Depends(get_current_user)) -> bool:
+    """
+    Checks if the current user has admin role.
+    Returns True if user is admin, otherwise False.
+    """
+    # You can customize this based on your user model and roles implementation
+    # This assumes there's a role field in the User model
+    return current_user.role == "admin" if hasattr(current_user, "role") else False
+
+
 def authenticate_user(db: Client, email_or_username: str, password: str) -> Optional[User]:
     # Try to find user by email first
     user_data = db.table("users").select("*").eq("email", email_or_username).execute()

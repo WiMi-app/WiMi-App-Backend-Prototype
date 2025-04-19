@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
     
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    
     SECRET_KEY: str = secret_key or ""
     if not SECRET_KEY:
         # Fallback for development only (do not use in production)

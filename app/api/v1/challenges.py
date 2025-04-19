@@ -11,6 +11,7 @@ from app.schemas.challenges import Challenge, ChallengeCreate, ChallengeUpdate, 
 from app.schemas.challenges import ChallengeParticipant, ChallengeParticipantCreate
 from app.schemas.challenges import ChallengePost, ChallengePostCreate, ChallengeAchievement
 from app.schemas.users import User
+from app.core.moderation import moderate_content
 
 router = APIRouter()
 
@@ -21,7 +22,7 @@ def get_utc_now() -> str:
 
 
 @router.post("/", response_model=Challenge)
-def create_challenge(
+async def create_challenge(
     challenge_data: ChallengeCreate,
     current_user: User = Depends(get_current_active_user),
     db: Client = Depends(get_supabase),
@@ -29,6 +30,39 @@ def create_challenge(
     """
     Create a new challenge.
     """
+    # First, moderate the content
+    content_to_moderate = []
+    
+    # Moderate title and description
+    if challenge_data.title:
+        content_to_moderate.append(challenge_data.title)
+    
+    if challenge_data.description:
+        content_to_moderate.append(challenge_data.description)
+    
+    # Moderate rules if present
+    if challenge_data.rules:
+        content_to_moderate.append(challenge_data.rules)
+    
+    # Combine all text for moderation
+    combined_text = " ".join(content_to_moderate)
+    
+    # Get image URLs if present
+    image_urls = [challenge_data.banner_image] if challenge_data.banner_image else None
+    
+    # Perform moderation check
+    moderation_result = await moderate_content(
+        text_content=combined_text if combined_text else None,
+        image_urls=image_urls
+    )
+    
+    # Check if content was flagged
+    if moderation_result.flagged:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Challenge content violates community guidelines and cannot be posted",
+        )
+    
     now = get_utc_now()
     challenge_dict = challenge_data.model_dump(exclude_unset=True)
     
@@ -236,7 +270,7 @@ def get_challenge(
 
 
 @router.put("/{challenge_id}", response_model=Challenge)
-def update_challenge(
+async def update_challenge(
     challenge_id: UUID,
     challenge_update: ChallengeUpdate,
     current_user: User = Depends(get_current_active_user),
@@ -263,6 +297,52 @@ def update_challenge(
         )
     
     update_data = {key: value for key, value in challenge_update.model_dump(exclude_unset=True).items() if value is not None}
+    
+    if update_data:
+        # Moderate updated content if there are changes to moderatable fields
+        content_to_moderate = []
+        existing_challenge = challenge
+        
+        # Check which fields are being updated and need moderation
+        if "title" in update_data:
+            content_to_moderate.append(update_data["title"])
+        elif existing_challenge.get("title"):
+            content_to_moderate.append(existing_challenge["title"])
+            
+        if "description" in update_data:
+            content_to_moderate.append(update_data["description"])
+        elif existing_challenge.get("description"):
+            content_to_moderate.append(existing_challenge["description"])
+            
+        if "rules" in update_data:
+            content_to_moderate.append(update_data["rules"])
+        elif existing_challenge.get("rules"):
+            content_to_moderate.append(existing_challenge["rules"])
+        
+        # Combine all text for moderation
+        combined_text = " ".join([text for text in content_to_moderate if text])
+        
+        # Get image URLs for moderation (either updated or existing)
+        image_url = None
+        if "banner_image" in update_data and update_data["banner_image"]:
+            image_url = update_data["banner_image"]
+        elif existing_challenge.get("banner_image"):
+            image_url = existing_challenge["banner_image"]
+        
+        image_urls = [image_url] if image_url else None
+        
+        # Perform moderation check
+        moderation_result = await moderate_content(
+            text_content=combined_text if combined_text else None,
+            image_urls=image_urls
+        )
+        
+        # Check if content was flagged
+        if moderation_result.flagged:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail="Challenge content violates community guidelines and cannot be posted",
+            )
     
     # Handle time field formatting
     if "check_in_time" in update_data and update_data["check_in_time"] is not None:
@@ -435,7 +515,7 @@ def leave_challenge(
 
 
 @router.post("/post", response_model=ChallengePost)
-def add_post_to_challenge(
+async def add_post_to_challenge(
     post_data: ChallengePostCreate,
     current_user: User = Depends(get_current_active_user),
     db: Client = Depends(get_supabase),
@@ -484,6 +564,43 @@ def add_post_to_challenge(
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail="This post is already added to the challenge",
+        )
+    
+    # Moderate post content before adding to challenge
+    # Get post content for moderation
+    content_to_moderate = post.get("content", "")
+    
+    # Get media URLs for moderation
+    media_urls = post.get("media_urls", [])
+    
+    # Parse media_urls if it's a string (PostgreSQL array format)
+    if isinstance(media_urls, str):
+        try:
+            if media_urls.startswith('{') and media_urls.endswith('}'):
+                if media_urls == "{}":
+                    media_urls = []
+                else:
+                    # Remove the curly braces and split by commas, then remove quotes
+                    urls = media_urls[1:-1].split(',')
+                    media_urls = [url.strip('"') for url in urls]
+            else:
+                # Fallback to JSON parsing for backward compatibility
+                import json
+                media_urls = json.loads(media_urls)
+        except:
+            media_urls = []
+    
+    # Perform moderation check
+    moderation_result = await moderate_content(
+        text_content=content_to_moderate,
+        image_urls=media_urls if media_urls else None
+    )
+    
+    # Check if content was flagged
+    if moderation_result.flagged:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Post content violates community guidelines and cannot be added to the challenge",
         )
     
     # Add post to challenge
@@ -1045,7 +1162,7 @@ def get_user_achievements(
 
 
 @router.post("/achievement", response_model=ChallengeAchievement)
-def add_achievement(
+async def add_achievement(
     challenge_id: UUID,
     achievement_type: str,
     description: str,
@@ -1071,6 +1188,19 @@ def add_achievement(
         raise HTTPException(
             status_code=http_status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to add an achievement to this challenge",
+        )
+    
+    # Moderate the achievement description
+    moderation_result = await moderate_content(
+        text_content=description,
+        image_urls=None
+    )
+    
+    # Check if content was flagged
+    if moderation_result.flagged:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Achievement description violates community guidelines and cannot be added",
         )
     
     # Create achievement

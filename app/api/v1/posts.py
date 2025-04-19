@@ -10,12 +10,13 @@ from app.core.deps import get_current_active_user
 from app.db.database import get_supabase
 from app.schemas.posts import Post, PostCreate, PostUpdate, PostWithDetails, UserSavedPostCreate
 from app.schemas.users import User
+from app.core.moderation import moderate_content
 
 router = APIRouter()
 
 
 @router.post("/", response_model=Post)
-def create_post(
+async def create_post(
     post_data: PostCreate,
     current_user: User = Depends(get_current_active_user),
     db: Client = Depends(get_supabase),
@@ -23,6 +24,19 @@ def create_post(
     """
     Create a new post.
     """
+    # First, moderate the content
+    moderation_result = await moderate_content(
+        text_content=post_data.content,
+        image_urls=post_data.media_urls if post_data.media_urls else None
+    )
+    
+    # Check if content was flagged
+    if moderation_result.flagged:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Content violates community guidelines and cannot be posted",
+        )
+        
     now = datetime.now().isoformat()
         
     # Prepare the post data for insertion
@@ -316,7 +330,7 @@ def get_post(
 
 
 @router.put("/{post_id}", response_model=Post)
-def update_post(
+async def update_post(
     post_id: UUID,
     post_update: PostUpdate,
     current_user: User = Depends(get_current_active_user),
@@ -348,6 +362,45 @@ def update_post(
     if not update_data:
         # Nothing to update
         return Post(**post)
+    
+    # Moderate content if there are changes to content or media
+    if "content" in update_data or "media_urls" in update_data:
+        # Get the full content for moderation
+        text_to_moderate = update_data.get("content", post["content"])
+        
+        # For media URLs, use the updated list if provided, otherwise use existing
+        if "media_urls" in update_data:
+            media_to_moderate = update_data["media_urls"]
+        else:
+            # Get existing media_urls from post
+            media_to_moderate = post.get("media_urls", [])
+            if isinstance(media_to_moderate, str):
+                try:
+                    # Parse PostgreSQL array format if needed
+                    if media_to_moderate.startswith('{') and media_to_moderate.endswith('}'):
+                        if media_to_moderate == "{}":
+                            media_to_moderate = []
+                        else:
+                            urls = media_to_moderate[1:-1].split(',')
+                            media_to_moderate = [url.strip('"') for url in urls]
+                    else:
+                        # Fallback to JSON parsing
+                        media_to_moderate = json.loads(media_to_moderate)
+                except:
+                    media_to_moderate = []
+        
+        # Perform moderation check
+        moderation_result = await moderate_content(
+            text_content=text_to_moderate,
+            image_urls=media_to_moderate if media_to_moderate else None
+        )
+        
+        # Check if content was flagged
+        if moderation_result.flagged:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Content violates community guidelines and cannot be posted",
+            )
     
     # Convert media_urls to PostgreSQL array format if it's being updated
     if update_data.get("media_urls") is not None and isinstance(update_data["media_urls"], list):
