@@ -13,6 +13,16 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def create_access_token(*, subject: Union[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Create a JWT access token for authentication.
+    
+    Args:
+        subject: The subject of the token (usually user ID)
+        expires_delta: Optional custom expiration time
+        
+    Returns:
+        str: The encoded JWT token
+    """
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
@@ -41,8 +51,27 @@ def create_access_token(*, subject: Union[str, Any], expires_delta: Optional[tim
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    Verify a password against a hash.
+    
+    Args:
+        plain_password: The plain text password
+        hashed_password: The hashed password to check against
+        
+    Returns:
+        bool: True if password matches, False otherwise
+    """
     return pwd_context.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
+    """
+    Hash a password for storage.
+    
+    Args:
+        password: The plain text password to hash
+        
+    Returns:
+        str: The hashed password
+    """
     return pwd_context.hash(password) 
