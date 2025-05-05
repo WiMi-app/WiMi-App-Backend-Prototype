@@ -12,25 +12,21 @@ BASE_COVER_IMAGE_URL = str(f"{settings.SUPABASE_URL}/storage/v1/object/sign/imag
 
 class UserBase(BaseModel):
     username: str
-    email: EmailStr
     full_name: Optional[str] = None
     bio: Optional[str] = None
     avatar_url: Optional[HttpUrl] = BASE_ICON_URL
-    cover_image_url: Optional[HttpUrl] = BASE_COVER_IMAGE_URL
     
+
     def model_dump_json_safe(self) -> Dict[str, Any]:
         """Convert model to a dict with URL fields as strings for JSON serialization"""
         data = self.model_dump()
         if data.get("avatar_url") is not None:
             data["avatar_url"] = str(data["avatar_url"])
-        if data.get("cover_image_url") is not None:
-            data["cover_image_url"] = str(data["cover_image_url"])
         return data
 
 
 class UserCreate(UserBase):
-    password: str
-    
+
     def model_dump_json_safe(self) -> Dict[str, Any]:
         """Convert model to a dict with URL fields as strings for JSON serialization, excluding password"""
         data = super().model_dump_json_safe()
@@ -44,7 +40,6 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     bio: Optional[str] = None
     avatar_url: Optional[HttpUrl] = BASE_ICON_URL
-    cover_image_url: Optional[HttpUrl] = BASE_COVER_IMAGE_URL
     password: Optional[str] = None
     
     def model_dump_json_safe(self) -> Dict[str, Any]:
@@ -52,8 +47,6 @@ class UserUpdate(BaseModel):
         data = self.model_dump(exclude_unset=True)
         if data.get("avatar_url") is not None:
             data["avatar_url"] = str(data["avatar_url"])
-        if data.get("cover_image_url") is not None:
-            data["cover_image_url"] = str(data["cover_image_url"])
         return data
 
 

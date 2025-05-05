@@ -16,17 +16,12 @@ class CommentCreate(CommentBase):
     parent_comment_id: Optional[UUID] = None
 
 
-class CommentUpdate(BaseModel):
-    content: str
-
-
 class Comment(CommentBase):
     id: UUID
     post_id: UUID
     user_id: UUID
     parent_comment_id: Optional[UUID] = None
     created_at: datetime
-    updated_at: datetime
 
     class Config:
         from_attributes = True
