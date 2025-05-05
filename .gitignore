@@ -28,6 +28,7 @@ ENV/
 # IDE specific files
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
 .DS_Store
@@ -42,3 +43,4 @@ logs/
 htmlcov/
 .pytest_cache/
 *.pdf
+*.md
