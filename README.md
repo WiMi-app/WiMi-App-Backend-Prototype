@@ -23,7 +23,7 @@ A production-ready FastAPI and Supabase-based backend for a social media applica
 
 ### Prerequisites
 
-- Python 3.9 or higher
+- Python 3.12
 - Supabase account and project
 - PostgreSQL database (provided by Supabase)
 
@@ -37,7 +37,7 @@ A production-ready FastAPI and Supabase-based backend for a social media applica
 
 2. Create a virtual environment:
    ```
-   python -m venv venv
+   python12 -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
@@ -46,35 +46,7 @@ A production-ready FastAPI and Supabase-based backend for a social media applica
    pip install -r requirements.txt
    ```
 
-4. Set up your environment variables in `.env` file:
-   ```
-   SUPABASE_URL=https://your-supabase-url.supabase.co
-   SUPABASE_KEY=your-supabase-key
-   DATABASE_URL=postgresql://postgres:your-password@your-supabase-url.supabase.co:5432/postgres
-   SECRET_KEY=your-secret-key-for-jwt
-   ALGORITHM=HS256
-   ACCESS_TOKEN_EXPIRE_MINUTES=60
-   APP_NAME=WiMi-Social
-   APP_VERSION=0.1.0
-   ENVIRONMENT=development
-   ```
-
-### Database Setup
-
-The application expects the following tables in your Supabase database:
-
-- users
-- posts
-- comments
-- likes
-- follows
-- hashtags
-- post_hashtags
-- notifications
-- messages
-- user_saved_posts
-
-See the `models.py` file for the schema details.
+4. Set up your environment variables in `.env` file
 
 ### Running the Application
 
@@ -117,55 +89,6 @@ API documentation is automatically generated at:
 - `DELETE /api/v1/likes/post/{post_id}`: Unlike a post
 - `DELETE /api/v1/likes/comment/{comment_id}`: Unlike a comment
 
-## Real-Time Photo Posting
-
-WiMi enforces real-time photo posting, meaning users can only post photos taken in the moment rather than from their photo album or gallery. This encourages authentic, in-the-moment sharing.
-
-### How It Works
-
-1. When a user takes a photo in the app, the client captures metadata including:
-   - Precise capture timestamp
-   - Device information
-   - Camera information
-   - Optional location data
-
-2. This metadata is sent along with the post content to the server.
-
-3. The server validates that:
-   - The `is_real_time` flag is set to true
-   - The photo's capture timestamp is within 60 seconds of the current time
-
-4. If validation passes, the post is created with the real-time photo. If validation fails, the request is rejected.
-
-### API Request Example
-
-```json
-POST /api/v1/posts/
-
-{
-  "content": "Beautiful sunset! #nofilter",
-  "media_urls": ["https://example.com/image.jpg"],
-  "location": "San Francisco, CA",
-  "is_private": false,
-  "is_real_time": true,
-  "image_metadata": {
-    "capture_timestamp": "2023-08-15T19:45:30.123456",
-    "device_info": {
-      "model": "iPhone 12",
-      "os": "iOS 15.5",
-      "app_version": "1.2.3"
-    },
-    "camera_info": {
-      "resolution": "12MP",
-      "camera_type": "back"
-    },
-    "location_data": {
-      "latitude": 37.7749,
-      "longitude": -122.4194,
-      "accuracy": 10.0
-    }
-  }
-}
 ```
 
 ## Deployment
