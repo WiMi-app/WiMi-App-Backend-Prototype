@@ -7,21 +7,20 @@ from pydantic import BaseModel, HttpUrl
 from app.schemas.users import User
 from app.schemas.posts import Post
 
-
+'''CHALLENGES'''
 class ChallengeBase(BaseModel):
     title: str
-    description: Optional[str] = None
+    description: str
     due_date: Optional[datetime] = None
     location: Optional[str] = None
     restriction: Optional[str] = None
-    repetition: Optional[str] = None  # 'daily', 'weekly', 'monthly', 'custom'
+    repetition: str = None  # 'daily', 'weekly', 'monthly', 'custom'
     repetition_frequency: Optional[int] = None  # e.g., 3 for "every 3 days"
     repetition_days: Optional[List[int]] = None  # For weekly challenges: [1,3,5] for Mon,Wed,Fri
-    check_in_time: Optional[time] = None
-    is_active: bool = True
+    check_in_time: time
     is_private: bool = False
-    max_participants: Optional[int] = None  # Null means unlimited
-    banner_image_url: Optional[HttpUrl] = None
+    time_window: int
+
 
 
 class ChallengeCreate(ChallengeBase):
@@ -38,10 +37,8 @@ class ChallengeUpdate(BaseModel):
     repetition_frequency: Optional[int] = None
     repetition_days: Optional[List[int]] = None
     check_in_time: Optional[time] = None
-    is_active: Optional[bool] = None
     is_private: Optional[bool] = None
-    max_participants: Optional[int] = None
-    banner_image_url: Optional[HttpUrl] = None
+    time_window: Optional[int] = None
 
 
 class Challenge(ChallengeBase):
@@ -49,11 +46,13 @@ class Challenge(ChallengeBase):
     creator_id: UUID
     created_at: datetime
     updated_at: datetime
+    
 
     class Config:
         from_attributes = True
 
 
+'''Challenge Participants'''
 class ChallengeParticipantCreate(BaseModel):
     challenge_id: UUID
 
@@ -93,13 +92,13 @@ class ChallengeWithDetails(Challenge):
     class Config:
         from_attributes = True
 
-
+'''Challenge Achievments'''
 class ChallengeAchievementCreate(BaseModel):
     challenge_id: UUID
     user_id: UUID
-    achievement_type: str  # 'streak', 'completion', 'milestone'
+    achievement_type: str  # 'success rate', 'completion'
     description: str
-    streak_count: Optional[int] = None
+    success_count: Optional[int] = None
 
 
 class ChallengeAchievement(BaseModel):
@@ -109,7 +108,7 @@ class ChallengeAchievement(BaseModel):
     achievement_type: str
     description: str
     achieved_at: datetime
-    streak_count: Optional[int] = None
+    success_count: Optional[int] = None
 
     class Config:
         from_attributes = True 

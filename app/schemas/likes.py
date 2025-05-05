@@ -14,15 +14,6 @@ class LikeCreate(LikeBase):
     post_id: Optional[UUID] = None
     comment_id: Optional[UUID] = None
 
-    @field_validator('comment_id')
-    def validate_target(cls, comment_id, info):
-        post_id = info.data.get('post_id')
-        if post_id is not None and comment_id is not None:
-            raise HTTPException(status_code=400, detail="Cannot like both post and comment at the same time")
-        if post_id is None and comment_id is None:
-            raise HTTPException(status_code=400, detail="Must like either a post or a comment")
-        return comment_id
-
 
 class Like(LikeBase):
     id: UUID
