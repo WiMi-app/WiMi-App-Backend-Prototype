@@ -4,7 +4,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 import logging
 import time
 
-from app.api.v1 import api_router
+from app.api.v0 import api_router
 from app.core.config import settings
 from app.core.middleware import APIUsageMiddleware
 
