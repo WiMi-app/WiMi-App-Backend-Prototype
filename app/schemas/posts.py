@@ -13,6 +13,7 @@ class PostBase(BaseModel):
     media_urls: Optional[List[str]] = []
     location: Optional[str] = None
     is_private: bool = False
+    challenge_id: UUID
 
 
 class PostCreate(PostBase):
@@ -33,23 +34,7 @@ class Post(PostBase):
     updated_at: datetime
     edited: bool = False
     view_count: int = 0
-
-    class Config:
-        from_attributes = True
-
-
-class PostWithUserInfo(Post):
-    user: User
-
-    class Config:
-        from_attributes = True
-
-
-class PostWithDetails(Post):
-    user: User
-    comments_count: int = 0
-    likes_count: int = 0
-    hashtags: List[Hashtag] = []
+    hashtags: Optional[List[str]] = []
 
     class Config:
         from_attributes = True

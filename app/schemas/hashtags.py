@@ -15,6 +15,7 @@ class HashtagCreate(HashtagBase):
 
 class Hashtag(HashtagBase):
     id: UUID
+    usage_count: int
     created_at: datetime
 
     class Config:
