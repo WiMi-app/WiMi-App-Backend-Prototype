@@ -5,14 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from supabase import Client
 import logging
-
+import httpx
 from app.core.config import settings
 from app.core.deps import authenticate_user, get_current_user
 from app.core.security import create_access_token, get_password_hash
 from app.db.database import get_supabase
 from app.schemas.auth import TokenData, LoginRequest
 from app.schemas.users import User, UserCreate
-
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -82,6 +81,7 @@ def login_email(
         "user_id": user.id,
         "expires": datetime.now(timezone.utc) + access_token_expires,
     }
+
 
 
 @router.post("/register", response_model=User)

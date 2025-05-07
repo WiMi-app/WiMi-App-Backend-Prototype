@@ -54,7 +54,7 @@ class UserSavedPost(BaseModel):
 
 
 class FeedItem(BaseModel):
-    post: PostWithDetails
+    post: UUID
     is_liked: bool = False
     is_saved: bool = False
 
