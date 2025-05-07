@@ -2,7 +2,7 @@ from datetime import datetime, time
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, HttpUrl, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.users import User
 from app.schemas.posts import Post
@@ -15,11 +15,29 @@ class ChallengeBase(BaseModel):
     location: Optional[str] = None
     restriction: Optional[str] = None
     repetition: str = Field(..., pattern='^(daily|weekly|monthly|custom|none)$')
-    repetition_frequency: Optional[int] = None  # e.g., 3 for "every 3 days"
-    repetition_days: Optional[List[int]] = None  # For weekly challenges: [1,3,5] for Mon,Wed,Fri
+    repetition_frequency: Optional[int] = Field(None, ge=1)  # Must be positive if provided
+    repetition_days: Optional[List[int]] = Field(None, min_items=1)  # Must have at least one day if provided
     check_in_time: time
     is_private: bool = False
-    time_window: int  # Grace period for challenge post in minutes
+    time_window: int = Field(..., ge=1)  # Grace period in minutes, must be positive
+
+    @field_validator('repetition_days')
+    def validate_repetition_days(cls, v, values):
+        if v is not None:
+            if values.get('repetition') != 'weekly':
+                raise ValueError('repetition_days can only be set for weekly repetition')
+            if not all(1 <= day <= 7 for day in v):
+                raise ValueError('repetition_days must be between 1 and 7')
+        return v
+
+    @field_validator('repetition_frequency')
+    def validate_repetition_frequency(cls, v, values):
+        if v is not None:
+            if values.get('repetition') == 'none':
+                raise ValueError('repetition_frequency cannot be set for no repetition')
+            if v < 1:
+                raise ValueError('repetition_frequency must be positive')
+        return v
 
 
 class ChallengeCreate(ChallengeBase):
@@ -33,11 +51,11 @@ class ChallengeUpdate(BaseModel):
     location: Optional[str] = None
     restriction: Optional[str] = None
     repetition: Optional[str] = Field(None, pattern='^(daily|weekly|monthly|custom|none)$')
-    repetition_frequency: Optional[int] = None
-    repetition_days: Optional[List[int]] = None
+    repetition_frequency: Optional[int] = Field(None, ge=1)
+    repetition_days: Optional[List[int]] = Field(None, min_items=1)
     check_in_time: Optional[time] = None
     is_private: Optional[bool] = None
-    time_window: Optional[int] = None
+    time_window: Optional[int] = Field(None, ge=1)
 
 
 class Challenge(ChallengeBase):
@@ -97,7 +115,7 @@ class ChallengeAchievementCreate(BaseModel):
     user_id: UUID
     achievement_type: str = Field(..., pattern='^(success_rate|completion)$')
     description: str
-    success_count: Optional[int] = None
+    success_count: Optional[int] = Field(None, ge=0)  # Must be non-negative if provided
 
 
 class ChallengeAchievement(BaseModel):
@@ -107,7 +125,7 @@ class ChallengeAchievement(BaseModel):
     achievement_type: str = Field(..., pattern='^(success_rate|completion)$')
     description: str
     achieved_at: datetime
-    success_count: Optional[int] = None
+    success_count: Optional[int] = Field(None, ge=0)
 
     class Config:
         from_attributes = True 
