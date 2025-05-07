@@ -11,11 +11,11 @@ BASE_ICON_URL = str(f"{settings.SUPABASE_URL}/storage/v1/object/sign/images/defa
 BASE_COVER_IMAGE_URL = str(f"{settings.SUPABASE_URL}/storage/v1/object/sign/images/default/cover.png?token={settings.SUPABASE_KEY}")
 
 class UserBase(BaseModel):
-    username: str
-    full_name: Optional[str] = None
+    username: str = Field(..., max_length=255)
+    full_name: str = Field(..., max_length=255)
     bio: Optional[str] = None
     avatar_url: Optional[HttpUrl] = BASE_ICON_URL
-    
+    updated_at: Optional[datetime] = None
 
     def model_dump_json_safe(self) -> Dict[str, Any]:
         """Convert model to a dict with URL fields as strings for JSON serialization"""

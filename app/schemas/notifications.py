@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class NotificationBase(BaseModel):
@@ -10,7 +10,7 @@ class NotificationBase(BaseModel):
     triggered_by_user_id: Optional[UUID] = None
     post_id: Optional[UUID] = None
     comment_id: Optional[UUID] = None
-    type: str
+    type: str = Field(..., max_length=50)
     message: str
     is_read: bool = False
 

@@ -2,11 +2,11 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class HashtagBase(BaseModel):
-    name: str
+    name: str = Field(..., max_length=255)
 
 
 class HashtagCreate(HashtagBase):

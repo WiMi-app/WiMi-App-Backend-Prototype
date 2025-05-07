@@ -2,25 +2,24 @@ from datetime import datetime, time
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, Field
 
 from app.schemas.users import User
 from app.schemas.posts import Post
 
 '''CHALLENGES'''
 class ChallengeBase(BaseModel):
-    title: str
+    title: str = Field(..., max_length=255)
     description: str
     due_date: Optional[datetime] = None
     location: Optional[str] = None
     restriction: Optional[str] = None
-    repetition: str = None  # 'daily', 'weekly', 'monthly', 'custom'
+    repetition: str = Field(..., pattern='^(daily|weekly|monthly|custom|none)$')
     repetition_frequency: Optional[int] = None  # e.g., 3 for "every 3 days"
     repetition_days: Optional[List[int]] = None  # For weekly challenges: [1,3,5] for Mon,Wed,Fri
     check_in_time: time
     is_private: bool = False
-    time_window: int
-
+    time_window: int  # Grace period for challenge post in minutes
 
 
 class ChallengeCreate(ChallengeBase):
@@ -28,12 +27,12 @@ class ChallengeCreate(ChallengeBase):
 
 
 class ChallengeUpdate(BaseModel):
-    title: Optional[str] = None
+    title: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     due_date: Optional[datetime] = None
     location: Optional[str] = None
     restriction: Optional[str] = None
-    repetition: Optional[str] = None
+    repetition: Optional[str] = Field(None, pattern='^(daily|weekly|monthly|custom|none)$')
     repetition_frequency: Optional[int] = None
     repetition_days: Optional[List[int]] = None
     check_in_time: Optional[time] = None
@@ -61,7 +60,7 @@ class ChallengeParticipant(BaseModel):
     challenge_id: UUID
     user_id: UUID
     joined_at: datetime
-    status: str = "active"  # 'active', 'completed', 'dropped'
+    status: str = Field("active", pattern='^(active|completed|dropped)$')
 
     class Config:
         from_attributes = True
@@ -96,7 +95,7 @@ class ChallengeWithDetails(Challenge):
 class ChallengeAchievementCreate(BaseModel):
     challenge_id: UUID
     user_id: UUID
-    achievement_type: str  # 'success rate', 'completion'
+    achievement_type: str = Field(..., pattern='^(success_rate|completion)$')
     description: str
     success_count: Optional[int] = None
 
@@ -105,7 +104,7 @@ class ChallengeAchievement(BaseModel):
     id: UUID
     challenge_id: UUID
     user_id: UUID
-    achievement_type: str
+    achievement_type: str = Field(..., pattern='^(success_rate|completion)$')
     description: str
     achieved_at: datetime
     success_count: Optional[int] = None
