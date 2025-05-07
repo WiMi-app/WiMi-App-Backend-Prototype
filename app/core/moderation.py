@@ -5,11 +5,26 @@ from openai import OpenAI
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
-# Import moderation stats tracker
+# Import moderation stats tracker and settings
 from app.core.middleware import moderation_stats
+from app.core.config import settings
 
-# Initialize the OpenAI client
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Initialize the OpenAI client if API key is available
+api_key = os.getenv("OPENAI_API_KEY")
+client = None
+
+if api_key:
+    client = OpenAI(api_key=api_key)
+elif settings.ENVIRONMENT == "development":
+    # In development, warn but don't fail
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning("OPENAI_API_KEY not set, moderation will use mock responses in development mode")
+else:
+    # In production, warn about missing API key
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.error("OPENAI_API_KEY not set, moderation will fail in production mode")
 
 class ModerationResult(BaseModel):
     flagged: bool
@@ -34,10 +49,38 @@ async def moderate_content(
     start_time = time.time()
     is_flagged = False
     
+    # Skip if no content is provided
+    if not text_content and not (image_urls and len(image_urls) > 0):
+        return ModerationResult(flagged=False)
+    
+    # In development without API key, provide mock response
+    if settings.ENVIRONMENT == "development" and client is None:
+        # Check for obvious bad words in development as a simple mock
+        bad_words = ["explicit", "violent", "hate", "illegal"]
+        
+        if text_content and any(word in text_content.lower() for word in bad_words):
+            mock_result = ModerationResult(
+                flagged=True,
+                categories={"harassment": True, "hate": False, "sexual": False, "violence": False},
+                category_scores={"harassment": 0.9, "hate": 0.2, "sexual": 0.1, "violence": 0.1}
+            )
+        else:
+            mock_result = ModerationResult(
+                flagged=False,
+                categories={"harassment": False, "hate": False, "sexual": False, "violence": False},
+                category_scores={"harassment": 0.1, "hate": 0.1, "sexual": 0.1, "violence": 0.1}
+            )
+        
+        # Record moderation stats
+        processing_time = (time.time() - start_time) * 1000  # Convert to ms
+        moderation_stats.increment_moderation(was_flagged=mock_result.flagged, processing_time_ms=processing_time)
+        
+        return mock_result
+    
     try:
-        # Skip if no content is provided
-        if not text_content and not (image_urls and len(image_urls) > 0):
-            return ModerationResult(flagged=False)
+        # If no OpenAI client is available and we're not in development, fail
+        if client is None:
+            raise ValueError("OpenAI API key not set")
             
         input_items = []
         
@@ -76,12 +119,25 @@ async def moderate_content(
             result = ModerationResult(flagged=False)
         
     except Exception as e:
-        # Log the error in a production system
-        is_flagged = True  # Fail closed for safety
-        result = ModerationResult(
-            flagged=is_flagged,
-            error=str(e)
-        )
+        # In development, provide more details about errors
+        if settings.ENVIRONMENT == "development":
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Moderation error: {str(e)}")
+            
+            # In development, don't fail closed for easier testing
+            is_flagged = False
+            result = ModerationResult(
+                flagged=is_flagged,
+                error=str(e)
+            )
+        else:
+            # In production, fail closed for safety
+            is_flagged = True
+            result = ModerationResult(
+                flagged=is_flagged,
+                error="Moderation service unavailable"
+            )
     
     finally:
         # Record moderation stats
