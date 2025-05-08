@@ -1,34 +1,23 @@
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional
-from uuid import UUID
 
-from pydantic import BaseModel
+class CommentCreate(BaseModel):
+    post_id: str = Field(..., description="ID of the post")
+    content: str = Field(
+        ..., min_length=1, max_length=300, description="Comment text"
+    )
 
-from app.schemas.users import User
+class CommentUpdate(BaseModel):
+    content: Optional[str] = Field(None, min_length=1, max_length=300)
 
-
-class CommentBase(BaseModel):
+class CommentOut(BaseModel):
+    id: str
+    post_id: str
+    user_id: str
     content: str
-
-
-class CommentCreate(CommentBase):
-    post_id: UUID
-    parent_comment_id: Optional[UUID] = None
-
-
-class Comment(CommentBase):
-    id: UUID
-    post_id: UUID
-    user_id: UUID
-    parent_comment_id: Optional[UUID] = None
     created_at: datetime
+    updated_at: datetime
 
     class Config:
-        from_attributes = True
-
-
-class CommentWithUserInfo(Comment):
-    user: User
-
-    class Config:
-        from_attributes = True 
+        orm_mode = True

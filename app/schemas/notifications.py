@@ -1,27 +1,21 @@
+from pydantic import BaseModel
+from enum import Enum
 from datetime import datetime
-from typing import Optional
-from uuid import UUID
 
-from pydantic import BaseModel, Field
+class NotificationType(str, Enum):
+    LIKE = "like"
+    COMMENT = "comment"
+    FOLLOW = "follow"
+    MENTION = "mention"
 
-
-class NotificationBase(BaseModel):
-    user_id: UUID
-    triggered_by_user_id: Optional[UUID] = None
-    post_id: Optional[UUID] = None
-    comment_id: Optional[UUID] = None
-    type: str = Field(..., max_length=50)
-    message: str
-    is_read: bool = False
-
-
-class NotificationCreate(NotificationBase):
-    pass
-
-
-class Notification(NotificationBase):
-    id: UUID
+class NotificationOut(BaseModel):
+    id: str
+    type: NotificationType
+    actor_id: str
+    recipient_id: str
+    target_id: str   # e.g. post/comment ID
+    is_read: bool
     created_at: datetime
 
     class Config:
-        from_attributes = True 
+        orm_mode = True

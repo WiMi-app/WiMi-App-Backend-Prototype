@@ -1,34 +1,11 @@
-from datetime import datetime
-from typing import List, Optional
-from uuid import UUID
-
 from pydantic import BaseModel, Field
+from datetime import datetime
 
-
-class HashtagBase(BaseModel):
-    name: str = Field(..., max_length=255)
-
-
-class HashtagCreate(HashtagBase):
-    pass
-
-
-class Hashtag(HashtagBase):
-    id: UUID
-    usage_count: int
+class HashtagOut(BaseModel):
+    id: str
+    tag: str = Field(..., min_length=1, max_length=50)
+    usage_count: int = Field(..., ge=0)
     created_at: datetime
 
     class Config:
-        from_attributes = True
-
-
-class PostHashtagCreate(BaseModel):
-    post_id: UUID
-    hashtag_id: UUID
-
-
-class PostHashtag(PostHashtagCreate):
-    created_at: datetime
-
-    class Config:
-        from_attributes = True 
+        orm_mode = True

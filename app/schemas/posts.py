@@ -1,70 +1,24 @@
+from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import List, Optional, Dict, Any
-from uuid import UUID
-
-from pydantic import BaseModel, HttpUrl, Field
-
-from app.schemas.users import User
-from app.schemas.hashtags import Hashtag
-
+from typing import Optional
 
 class PostBase(BaseModel):
-    content: str
-    media_urls: Optional[List[str]] = []
-    location: Optional[str] = None
-    is_private: bool = False
-    challenge_id: Optional[UUID] = None
-
+    challenge_id: str = Field(..., description="Associated challenge ID")
+    content_url: str = Field(
+        ..., min_length=5, description="URL of image/video"
+    )
 
 class PostCreate(PostBase):
     pass
 
-
 class PostUpdate(BaseModel):
-    content: Optional[str] = None
-    media_urls: Optional[List[str]] = None
-    location: Optional[str] = None
-    is_private: Optional[bool] = None
+    content_url: Optional[str] = Field(None, min_length=5)
 
-
-class Post(PostBase):
-    id: UUID
-    user_id: UUID
+class PostOut(PostBase):
+    id: str
+    user_id: str
     created_at: datetime
     updated_at: datetime
-    edited: bool = False
 
     class Config:
-        from_attributes = True
-
-
-class UserSavedPostCreate(BaseModel):
-    post_id: UUID
-
-
-class UserSavedPost(BaseModel):
-    user_id: UUID
-    post_id: UUID
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class PostWithDetails(Post):
-    user: User
-    likes_count: int = 0
-    comments_count: int = 0
-    hashtags: Optional[List[str]] = []
-
-    class Config:
-        from_attributes = True
-
-
-class FeedItem(BaseModel):
-    post: PostWithDetails
-    is_liked: bool = False
-    is_saved: bool = False
-
-    class Config:
-        from_attributes = True 
+        orm_mode = True

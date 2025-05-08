@@ -1,21 +1,14 @@
+from pydantic import BaseModel, Field
 from datetime import datetime
-from uuid import UUID
 
-from pydantic import BaseModel
+class FollowCreate(BaseModel):
+    followee_id: str = Field(..., description="User ID to follow")
 
-
-class FollowBase(BaseModel):
-    followed_id: UUID
-
-
-class FollowCreate(FollowBase):
-    pass
-
-
-class Follow(FollowBase):
-    id: UUID
-    follower_id: UUID
+class FollowOut(BaseModel):
+    id: str
+    follower_id: str
+    followee_id: str
     created_at: datetime
 
     class Config:
-        from_attributes = True 
+        orm_mode = True

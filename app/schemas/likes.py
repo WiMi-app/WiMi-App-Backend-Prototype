@@ -1,26 +1,14 @@
+from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional
-from uuid import UUID
 
-from pydantic import BaseModel, field_validator
-from fastapi import HTTPException
+class LikeCreate(BaseModel):
+    post_id: str = Field(..., description="ID of the post to like")
 
-
-class LikeBase(BaseModel):
-    pass
-
-
-class LikeCreate(LikeBase):
-    post_id: Optional[UUID] = None
-    comment_id: Optional[UUID] = None
-
-
-class Like(LikeBase):
-    id: UUID
-    user_id: UUID
-    post_id: Optional[UUID] = None
-    comment_id: Optional[UUID] = None
+class LikeOut(BaseModel):
+    id: str
+    post_id: str
+    user_id: str
     created_at: datetime
 
     class Config:
-        from_attributes = True 
+        orm_mode = True
