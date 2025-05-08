@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from enum import Enum
 from datetime import datetime
 
@@ -16,6 +16,4 @@ class NotificationOut(BaseModel):
     target_id: str   # e.g. post/comment ID
     is_read: bool
     created_at: datetime
-
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

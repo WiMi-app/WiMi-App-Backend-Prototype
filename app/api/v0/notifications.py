@@ -4,7 +4,7 @@ from typing import List
 from app.schemas.notifications import NotificationOut
 from app.core.deps import get_current_user, get_supabase
 
-router = APIRouter(prefix="/api/v0/notifications", tags=["notifications"])
+router = APIRouter(tags=["notifications"])
 
 @router.get(
     "/",

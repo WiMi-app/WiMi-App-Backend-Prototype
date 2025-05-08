@@ -5,7 +5,7 @@ from app.core.config import supabase
 from app.core.deps import get_current_user
 from app.schemas.posts import PostCreate, PostUpdate, PostOut
 
-router = APIRouter(prefix="/api/v0/posts", tags=["posts"])
+router = APIRouter(tags=["posts"])
 
 @router.post("/", response_model=PostOut, status_code=status.HTTP_201_CREATED)
 async def create_post(payload: PostCreate, user=Depends(get_current_user)):

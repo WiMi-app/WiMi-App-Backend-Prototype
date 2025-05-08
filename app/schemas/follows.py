@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 
 class FollowCreate(BaseModel):
@@ -9,6 +9,4 @@ class FollowOut(BaseModel):
     follower_id: str
     followee_id: str
     created_at: datetime
-
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)

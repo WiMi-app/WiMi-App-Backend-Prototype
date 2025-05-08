@@ -5,7 +5,7 @@ from app.core.config import supabase
 from app.core.deps import get_current_user
 from app.schemas.challenges import ChallengeCreate, ChallengeUpdate, ChallengeOut
 
-router = APIRouter(prefix="/api/v0/challenges", tags=["challenges"])
+router = APIRouter(tags=["challenges"])
 
 @router.post("/", response_model=ChallengeOut, status_code=status.HTTP_201_CREATED)
 async def create_challenge(payload: ChallengeCreate, user=Depends(get_current_user)):

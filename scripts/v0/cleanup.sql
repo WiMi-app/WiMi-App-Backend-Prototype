@@ -1,0 +1,12 @@
+DELETE FROM public.challenge_achievements;
+DELETE FROM public.challenge_categories;
+DELETE FROM public.challenge_participants;
+DELETE FROM public.user_saved_posts;
+DELETE FROM public.notifications;
+DELETE FROM public.hashtags;
+DELETE FROM public.likes;
+DELETE FROM public.comments;
+DELETE FROM public.posts;
+DELETE FROM public.follows;
+DELETE FROM public.challenges;
+DELETE FROM public.users;

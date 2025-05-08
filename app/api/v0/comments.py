@@ -6,7 +6,7 @@ from app.core.config import supabase
 from app.core.deps import get_current_user
 from app.schemas.comments import CommentCreate, CommentOut
 
-router = APIRouter(prefix="/api/v0/comments", tags=["comments"])
+router = APIRouter(tags=["comments"])
 
 class CommentUpdate(BaseModel):
     content: str

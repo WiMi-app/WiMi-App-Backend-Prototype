@@ -6,7 +6,7 @@ from app.core.deps import get_current_user
 from app.schemas.users import UserUpdate
 from app.schemas.users import UserOut
 
-router = APIRouter(prefix="/api/v0/users", tags=["users"])
+router = APIRouter(tags=["users"])
 
 @router.get("/me", response_model=UserOut)
 async def read_current_user(user=Depends(get_current_user)):

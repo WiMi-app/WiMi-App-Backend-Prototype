@@ -11,7 +11,7 @@ if __name__ == "__main__":
     """
     Run the application with environment-specific settings.
     """
-    # Common Uvicorn arguments
+    # Uvicorn arguments
     uvicorn_kwargs = {
         "app": app,                
         "host": "0.0.0.0",
@@ -30,4 +30,4 @@ if __name__ == "__main__":
         # Development: auto-reload and single worker
         uvicorn_kwargs["reload"] = True
 
-    uvicorn.run(**uvicorn_kwargs)
+    uvicorn.run(app)

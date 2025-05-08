@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings
 from pydantic import Field, ConfigDict
 from supabase import create_client, Client
-
+import os
 class Settings(BaseSettings):
     # ─── App Metadata ────────────────────────────────────────────────────────
     APP_NAME: str = Field("WiMi", env="APP_NAME")
@@ -11,31 +11,30 @@ class Settings(BaseSettings):
     API_V1_STR: str = Field("/api/v0", env="API_V1_STR")
 
     # ─── Supabase ─────────────────────────────────────────────────────────────
-    SUPABASE_URL: str = Field("", env="SUPABASE_URL")
-    SUPABASE_KEY: str         = Field("", env="SUPABASE_KEY")
+    SUPABASE_URL: str = Field(os.getenv("SUPABASE_URL"), env="SUPABASE_URL")
+    SUPABASE_KEY: str = Field(os.getenv("SUPABASE_KEY"), env="SUPABASE_KEY")
 
     # ─── OpenAI ─────────────────────────────────────────────────────────────
-    OPENAI_KEY: str = Field("", env="OPENAI_API_KEY")
+    OPENAI_KEY: str = Field(os.getenv("OPENAI_API_KEY"), env="OPENAI_API_KEY")
 
     # ─── JWT / Auth ───────────────────────────────────────────────────────────
-    JWT_SECRET: str = Field("", env="SECRET_KEY")
+    JWT_SECRET: str = Field(os.getenv("SECRET_KEY"), env="SECRET_KEY")
     JWT_ALGORITHM: str = Field("HS256", env="ALGORITHM")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
         60, env="ACCESS_TOKEN_EXPIRE_MINUTES"
     )
 
     # ─── CORS ─────────────────────────────────────────────────────────────────
-    # Plain string here; you'll split it in your code or middleware if needed.
-    BACKEND_CORS_ORIGINS: str = Field("", env="BACKEND_CORS_ORIGINS")
+    BACKEND_CORS_ORIGINS: str = Field(os.getenv("BACKEND_CORS_ORIGINS"), env="BACKEND_CORS_ORIGINS")
 
     # ─── Logging ───────────────────────────────────────────────────────────────
-    LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
+    LOG_LEVEL: str = Field(os.getenv("LOG_LEVEL"), env="LOG_LEVEL")
 
     # ─── Pydantic-Settings Config ─────────────────────────────────────────────
     model_config = ConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore",         # drop any unknown env vars (OPENAI_API_KEY, etc.)
+        extra="ignore",
     )
 
     def get_cors_origins(self) -> list[str]:

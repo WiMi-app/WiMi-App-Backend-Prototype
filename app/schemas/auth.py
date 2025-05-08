@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 class UserSignUp(BaseModel):
     email: EmailStr = Field(..., description="User's email address")
@@ -15,6 +15,4 @@ class UserLogin(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
-
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
