@@ -1,14 +1,23 @@
-from pydantic import BaseModel, ConfigDict
-from enum import Enum
 from datetime import datetime
+from enum import Enum
+
+from pydantic import BaseModel, ConfigDict
+
 
 class NotificationType(str, Enum):
+    """
+    Enumeration of supported notification types.
+    """
     LIKE = "like"
     COMMENT = "comment"
     FOLLOW = "follow"
     MENTION = "mention"
 
 class NotificationOut(BaseModel):
+    """
+    Schema for notification data returned by the API.
+    Includes all notification fields including type classification.
+    """
     id: str
     type: NotificationType
     actor_id: str

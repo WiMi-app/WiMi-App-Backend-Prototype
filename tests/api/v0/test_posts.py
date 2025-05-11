@@ -1,8 +1,11 @@
 import types
 from types import SimpleNamespace
+
 import pytest
+
 from app.api.v0.posts import create_post, list_posts
 from app.schemas.posts import PostCreate
+
 
 # Integration tests
 def test_list_posts_integration(client):

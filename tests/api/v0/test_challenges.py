@@ -1,8 +1,13 @@
-import pytest
 import types
 from types import SimpleNamespace
-from app.api.v0.challenges import create_challenge, list_challenges, get_challenge, update_challenge, delete_challenge
+
+import pytest
+
+from app.api.v0.challenges import (create_challenge, delete_challenge,
+                                   get_challenge, list_challenges,
+                                   update_challenge)
 from app.schemas.challenges import ChallengeCreate, ChallengeUpdate
+
 
 # Integration tests
 def test_list_challenges_integration(client):

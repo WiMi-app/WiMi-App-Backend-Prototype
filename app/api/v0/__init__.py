@@ -1,6 +1,13 @@
+"""
+API v0 router module.
+
+This module configures all API routes for version 0 of the WiMi API.
+It imports and includes routers from various feature modules with appropriate prefixes and tags.
+"""
 from fastapi import APIRouter
 
-from app.api.v0 import auth, users, posts, likes, challenges, comments, notifications, follows
+from app.api.v0 import (auth, challenges, comments, follows, likes,
+                        notifications, posts, users)
 
 api_router = APIRouter()
 

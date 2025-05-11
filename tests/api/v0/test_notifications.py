@@ -1,7 +1,11 @@
-import pytest
 import types
 from types import SimpleNamespace
-from app.api.v0.notifications import list_notifications, mark_read, mark_all_read
+
+import pytest
+
+from app.api.v0.notifications import (list_notifications, mark_all_read,
+                                      mark_read)
+
 
 def test_list_and_mark_notifications(client, auth_headers):
     # create a notification via direct supabase call or assume one exists

@@ -1,5 +1,6 @@
 import pytest
 
+
 def test_read_me(client, auth_headers):
     resp = client.get("/api/v0/users/me", headers=auth_headers)
     assert resp.status_code == 200

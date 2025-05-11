@@ -1,8 +1,17 @@
-from pydantic_settings import BaseSettings
-from pydantic import Field, ConfigDict
-from supabase import create_client, Client
 import os
+from pydantic import ConfigDict, Field
+from pydantic_settings import BaseSettings
+from supabase import Client, create_client
+
+
 class Settings(BaseSettings):
+    """
+    Application settings loaded from environment variables with fallbacks.
+    
+    Settings are loaded from environment variables, .env file, or defaults defined here.
+    Each setting has a descriptive Field with env parameter that maps to the corresponding
+    environment variable name.
+    """
     # ─── App Metadata ────────────────────────────────────────────────────────
     APP_NAME: str = Field("WiMi", env="APP_NAME")
     APP_VERSION: str = Field("0.1.0", env="APP_VERSION")
@@ -40,6 +49,9 @@ class Settings(BaseSettings):
     def get_cors_origins(self) -> list[str]:
         """
         Helper to turn a CSV string into a list of origins.
+        
+        Returns:
+            list[str]: List of CORS origins from the BACKEND_CORS_ORIGINS setting
         """
         if not self.BACKEND_CORS_ORIGINS:
             return []

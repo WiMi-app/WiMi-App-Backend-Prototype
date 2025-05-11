@@ -1,7 +1,10 @@
-import pytest
 from types import SimpleNamespace
+
+import pytest
+
 from app.api.v0.follows import follow_user, unfollow_user
 from app.schemas.follows import FollowCreate
+
 
 # Integration tests
 def test_cannot_follow_self_integration(client, auth_headers):

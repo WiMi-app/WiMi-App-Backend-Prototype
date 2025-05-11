@@ -1,7 +1,10 @@
-import pytest
 from types import SimpleNamespace
+
+import pytest
+
 from app.api.v0.likes import like_post, unlike_post
 from app.schemas.likes import LikeCreate
+
 
 # Integration tests
 def test_like_and_unlike_integration(client, auth_headers):
