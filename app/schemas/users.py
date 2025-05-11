@@ -13,7 +13,7 @@ class UserOut(UserBase):
     id: str
     avatar_url: Optional[str] = None
     bio: Optional[str] = None
-    updated_at: datetime
+    updated_at: str = Field(default_factory=lambda: datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f"))
     model_config = ConfigDict(from_attributes=True)
 
 class UserUpdate(BaseModel):

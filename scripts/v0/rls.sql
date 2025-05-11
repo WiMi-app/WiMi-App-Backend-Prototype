@@ -26,6 +26,11 @@ CREATE POLICY "Users can update own profile"
     ON public.users FOR UPDATE
     USING (auth.uid() = id);
 
+-- Allow service role to insert new users during signup
+CREATE POLICY "Service can create users"
+    ON public.users FOR INSERT
+    WITH CHECK (true);
+
 -- Posts Table Policies
 -- Public posts are visible to everyone
 CREATE POLICY "Public posts are viewable by everyone"

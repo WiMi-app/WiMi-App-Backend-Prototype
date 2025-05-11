@@ -9,8 +9,9 @@ router = APIRouter(tags=["challenges"])
 
 @router.post("/", response_model=ChallengeOut, status_code=status.HTTP_201_CREATED)
 async def create_challenge(payload: ChallengeCreate, user=Depends(get_current_user)):
-    record = payload.dict()
-    record.update({"creator_id": user.id, "created_at": datetime.utcnow(), "updated_at": datetime.utcnow()})
+    record = payload.model_dump()
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
+    record.update({"creator_id": user.id, "created_at": now, "updated_at": now})
     resp = supabase.table("challenges").insert(record).execute()
     if resp.error:
         raise HTTPException(status_code=400, detail=resp.error.message)
@@ -33,8 +34,8 @@ async def update_challenge(challenge_id: str, payload: ChallengeUpdate, user=Dep
     exists = supabase.table("challenges").select("creator_id").eq("id", challenge_id).single().execute()
     if exists.error or exists.data["creator_id"] != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
-    update_data = payload.dict(exclude_unset=True)
-    update_data["updated_at"] = datetime.utcnow()
+    update_data = payload.model_dump(exclude_unset=True)
+    update_data["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
     supabase.table("challenges").update(update_data).eq("id", challenge_id).execute()
     return supabase.table("challenges").select("*").eq("id", challenge_id).single().execute().data
 
