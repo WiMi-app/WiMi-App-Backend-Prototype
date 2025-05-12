@@ -7,7 +7,7 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import requests
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
 from gotrue.errors import AuthApiError
 
 from app.core.config import settings, supabase
@@ -54,6 +54,7 @@ async def signup(user: UserSignUp):
             "id": user_id,
             "username": username,
             "full_name": "",
+            "email": user.email,
             "bio": None,
             "avatar_url": None,
             "updated_at": now
@@ -79,7 +80,7 @@ async def signup(user: UserSignUp):
         raise HTTPException(status_code=500, detail=f"Error creating user: {str(e)}")
 
 @router.post("/token", response_model=Token)
-async def login_for_access_token(user_login: UserLogin):
+async def login_for_access_token(user_login: UserLogin, response: Response):
     """
     Token login using email and password via JSON.
     """
@@ -95,6 +96,17 @@ async def login_for_access_token(user_login: UserLogin):
         access_token = auth_resp.session.access_token
         refresh_token = auth_resp.session.refresh_token
         
+        # set JWT in cookie for browser-based auth
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            secure=settings.ENVIRONMENT == "production",
+            samesite="lax",
+            max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            path="/",
+        )
+        
         return Token(access_token=access_token, refresh_token=refresh_token, token_type="bearer")
    
     except AuthApiError as e:
@@ -107,10 +119,12 @@ async def login_for_access_token(user_login: UserLogin):
         raise HTTPException(status_code=500, detail=f"Login error: {str(e)}")
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
-async def logout():
+async def logout(response: Response):
     """
     Logs out the user (token-based, no cookies to delete).
     """
+    # Remove the stored JWT cookie so the user is fully logged out
+    response.delete_cookie(key="access_token", path="/")
     return {"detail": "Successfully logged out"}
 
 @router.post("/refresh", response_model=Token)

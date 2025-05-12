@@ -10,3 +10,4 @@ DELETE FROM public.posts;
 DELETE FROM public.follows;
 DELETE FROM public.challenges;
 DELETE FROM public.users;
+DELETE FROM auth.users;

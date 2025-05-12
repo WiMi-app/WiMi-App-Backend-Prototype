@@ -35,12 +35,35 @@ async def read_user(user_id: str):
     Raises:
         HTTPException: 404 if user not found
     """
-    resp = supabase.table("users")\
-        .select("id,username,full_name,avatar_url")\
-            .eq("id", user_id).single().execute()
-    if resp.error:
+    try:
+        resp = supabase.table("users")\
+            .select("id,username,full_name,avatar_url,email")\
+                .eq("id", user_id).single().execute()
+        return resp.data
+    except Exception as e:
         raise HTTPException(status_code=404, detail="User not found")
-    return resp.data
+
+@router.get("/by-username/{username}", response_model=UserOut)
+async def read_user_by_username(username: str):
+    """
+    Get details of a specific user by username.
+    
+    Args:
+        username (str): Username of the user to retrieve
+        
+    Returns:
+        UserOut: User profile data
+        
+    Raises:
+        HTTPException: 404 if user not found
+    """
+    try:
+        resp = supabase.table("users")\
+            .select("id,username,full_name,avatar_url,email")\
+                .eq("username", username).single().execute()
+        return resp.data
+    except Exception as e:
+        raise HTTPException(status_code=404, detail="User not found")
 
 @router.put("/me", response_model=UserOut)
 async def update_user(payload: UserUpdate, user=Depends(get_current_user)):
@@ -58,7 +81,7 @@ async def update_user(payload: UserUpdate, user=Depends(get_current_user)):
     data["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
     supabase.table("users").update(data).eq("id", user.id).execute()
     return supabase.table("users")\
-        .select("id,username,full_name,avatar_url")\
+        .select("id,username,full_name,avatar_url,email")\
         .eq("id", user.id)\
         .single().execute().data
         
