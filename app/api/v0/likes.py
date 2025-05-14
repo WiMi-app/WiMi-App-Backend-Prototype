@@ -35,14 +35,24 @@ def like_post(
         HTTPException: 400 if database operation fails
     """
     data = {"user_id": current_user.id, "post_id": payload.post_id}
-    res = (
-        supabase.from_("likes")
-        .upsert(data, on_conflict=["user_id", "post_id"])
-        .single()
-    )
-    if res.error:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, res.error.message)
-    return res.data
+    try:
+        # First check if like already exists
+        existing = supabase.table("likes").select("*") \
+            .eq("user_id", current_user.id) \
+            .eq("post_id", payload.post_id) \
+            .execute()
+            
+        # If like exists, return it
+        if existing.data and len(existing.data) > 0:
+            return existing.data[0]
+            
+        # Otherwise create new like
+        res = supabase.table("likes").insert(data).execute()
+        if not res.data:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Failed to create like")
+        return res.data[0]
+    except Exception as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Error: {str(e)}")
 
 @router.delete(
     "/{like_id}",
@@ -69,10 +79,20 @@ def unlike_post(
         HTTPException: 403 if user is not authorized to remove the like
         HTTPException: 400 if database operation fails
     """
-    rec = supabase.from_("likes").select("user_id").eq("id", like_id).single()
-    if rec.error or rec.data["user_id"] != current_user.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized")
-    res = supabase.from_("likes").delete().eq("id", like_id)
-    if res.error:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, res.error.message)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    try:
+        # Check if like exists and belongs to current user
+        rec = supabase.table("likes").select("user_id").eq("id", like_id).execute()
+        
+        if not rec.data or len(rec.data) == 0:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Like not found")
+            
+        if rec.data[0]["user_id"] != current_user.id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized")
+            
+        # Delete the like
+        supabase.table("likes").delete().eq("id", like_id).execute()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Error: {str(e)}")
