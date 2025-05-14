@@ -107,7 +107,7 @@ async def update_challenge(challenge_id: str, payload: ChallengeUpdate, user=Dep
         # Update the challenge
         update_data = payload.model_dump(exclude_unset=True)
         update_data["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
-        
+            
         # Convert time to string if present
         if "check_in_time" in update_data and update_data["check_in_time"] is not None:
             update_data["check_in_time"] = update_data["check_in_time"].strftime("%H:%M:%S")
@@ -141,7 +141,7 @@ async def delete_challenge(challenge_id: str, user=Depends(get_current_user)):
     try:
         # Check if challenge exists and belongs to user
         exists = supabase.table("challenges").select("creator_id").eq("id", challenge_id).single().execute()
-        
+            
         if exists.data["creator_id"] != user.id:
             raise HTTPException(status_code=403, detail="Not authorized to delete this challenge")
             

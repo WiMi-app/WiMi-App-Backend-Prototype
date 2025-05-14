@@ -28,7 +28,7 @@ async def create_post(payload: PostCreate, user=Depends(get_current_user)):
     # Create the post record
     post_data = {
         "user_id": user.id,
-        "content": payload.content,
+                    "content": payload.content,
         "media_urls": payload.media_urls if hasattr(payload, "media_urls") and payload.media_urls else None,
         "location": payload.location if hasattr(payload, "location") and payload.location else None,
         "is_private": payload.is_private if hasattr(payload, "is_private") else False,
@@ -119,7 +119,7 @@ async def update_post(post_id: str, payload: PostUpdate, user=Depends(get_curren
         if exists.data["user_id"] != user.id:
             raise HTTPException(status_code=403, detail="Not authorized to update this post")
             
-        # Update the post
+            # Update the post
         update_data = payload.model_dump(exclude_unset=True)
         update_data["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
         update_data["edited"] = True
@@ -153,7 +153,7 @@ async def delete_post(post_id: str, user=Depends(get_current_user)):
     try:
         # Check if post exists and belongs to user
         exists = supabase.table("posts").select("user_id").eq("id", post_id).single().execute()
-        
+            
         if exists.data["user_id"] != user.id:
             raise HTTPException(status_code=403, detail="Not authorized to delete this post")
             

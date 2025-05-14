@@ -12,6 +12,14 @@ class NotificationType(str, Enum):
     COMMENT = "comment"
     FOLLOW = "follow"
     MENTION = "mention"
+    
+class NotificationStatus(str, Enum):
+    """
+    Enumeration of supported notification statuses.
+    """
+    PENDING = "pending"
+    DELIVERED = "delivered"
+    FAILED = "failed"
 
 class NotificationOut(BaseModel):
     """
@@ -20,9 +28,12 @@ class NotificationOut(BaseModel):
     """
     id: str
     type: NotificationType
-    actor_id: str
-    recipient_id: str
-    target_id: str   # e.g. post/comment ID
+    user_id: str
+    triggered_by_id: str
+    post_id: str | None = None
+    comment_id: str | None = None
+    message: str
     is_read: bool
     created_at: datetime
+    status: NotificationStatus
     model_config = ConfigDict(from_attributes=True)

@@ -89,7 +89,8 @@ CREATE TABLE public.notifications (
     type VARCHAR(50) NOT NULL,
     message TEXT NOT NULL,
     is_read BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    status VARCHAR(50) NOT NULL
 );
 
 -- User Saved Posts Table

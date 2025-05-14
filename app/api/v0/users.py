@@ -38,7 +38,7 @@ async def read_user(user_id: str):
     try:
         resp = supabase.table("users")\
             .select("id,username,full_name,avatar_url,email")\
-                .eq("id", user_id).single().execute()
+            .eq("id", user_id).single().execute()
         return resp.data
     except Exception as e:
         raise HTTPException(status_code=404, detail="User not found")
