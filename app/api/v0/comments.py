@@ -30,12 +30,20 @@ async def create_comment(payload: CommentCreate, user=Depends(get_current_user))
     Raises:
         HTTPException: 400 if creation fails
     """
-    record = payload.model_dump()
-    record.update({"user_id": user.id, "created_at": datetime.utcnow()})
-    resp = supabase.table("comments").insert(record).execute()
-    if resp.error:
-        raise HTTPException(status_code=400, detail=resp.error.message)
-    return resp.data[0]
+    try:
+        record = payload.model_dump()
+        # Convert datetime to string to make it JSON serializable
+        now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")
+        record.update({"user_id": user.id, "created_at": now})
+        
+        resp = supabase.table("comments").insert(record).execute()
+        
+        if not resp.data:
+            raise HTTPException(status_code=400, detail="Failed to create comment")
+            
+        return resp.data[0]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error creating comment: {str(e)}")
 
 @router.get("/", response_model=list[CommentOut])
 async def list_comments(post_id: str = None):
@@ -48,11 +56,14 @@ async def list_comments(post_id: str = None):
     Returns:
         list[CommentOut]: List of comment objects
     """
-    query = supabase.table("comments").select("*")
-    if post_id:
-        query = query.eq("post_id", post_id)
-    resp = query.execute()
-    return resp.data
+    try:
+        query = supabase.table("comments").select("*")
+        if post_id:
+            query = query.eq("post_id", post_id)
+        resp = query.execute()
+        return resp.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching comments: {str(e)}")
 
 @router.get("/{comment_id}", response_model=CommentOut)
 async def get_comment(comment_id: str):
@@ -68,10 +79,11 @@ async def get_comment(comment_id: str):
     Raises:
         HTTPException: 404 if comment not found
     """
-    resp = supabase.table("comments").select("*").eq("id", comment_id).single().execute()
-    if resp.error:
+    try:
+        resp = supabase.table("comments").select("*").eq("id", comment_id).single().execute()
+        return resp.data
+    except Exception as e:
         raise HTTPException(status_code=404, detail="Comment not found")
-    return resp.data
 
 @router.put("/{comment_id}", response_model=CommentOut)
 async def update_comment(comment_id: str, payload: CommentUpdate, user=Depends(get_current_user)):
@@ -88,13 +100,28 @@ async def update_comment(comment_id: str, payload: CommentUpdate, user=Depends(g
         
     Raises:
         HTTPException: 403 if user is not the comment author
+        HTTPException: 404 if comment not found
     """
-    exists = supabase.table("comments").select("user_id").eq("id", comment_id).single().execute()
-    if exists.error or exists.data["user_id"] != user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    update_data = {"content": payload.content, "updated_at": datetime.utcnow()}
-    supabase.table("comments").update(update_data).eq("id", comment_id).execute()
-    return supabase.table("comments").select("*").eq("id", comment_id).single().execute().data
+    try:
+        # Check if comment exists and belongs to user
+        exists = supabase.table("comments").select("user_id").eq("id", comment_id).single().execute()
+        
+        if exists.data["user_id"] != user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to update this comment")
+            
+        # Update only the content field
+        update_data = {"content": payload.content}
+        
+        # Update the comment
+        supabase.table("comments").update(update_data).eq("id", comment_id).execute()
+        
+        # Return updated comment
+        updated_comment = supabase.table("comments").select("*").eq("id", comment_id).single().execute()
+        return updated_comment.data
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=404, detail="Comment not found")
 
 @router.delete("/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_comment(comment_id: str, user=Depends(get_current_user)):
@@ -109,10 +136,39 @@ async def delete_comment(comment_id: str, user=Depends(get_current_user)):
         None
         
     Raises:
-        HTTPException: 403 if user is not the comment author
+        HTTPException: 403 if user is neither the comment author nor the post owner
+        HTTPException: 404 if comment not found
     """
-    exists = supabase.table("comments").select("user_id").eq("id", comment_id).single().execute()
-    if exists.error or exists.data["user_id"] != user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    supabase.table("comments").delete().eq("id", comment_id).execute()
-    return None
+    try:
+        # Get the comment details including post_id and user_id
+        comment = supabase.table("comments").select("user_id,post_id").eq("id", comment_id).single().execute()
+        
+        if not comment.data:
+            raise HTTPException(status_code=404, detail="Comment not found")
+            
+        comment_user_id = comment.data["user_id"]
+        post_id = comment.data["post_id"]
+        
+        # Check if user is the comment author (direct permission)
+        is_comment_author = comment_user_id == user.id
+        
+        # Check if user is the post owner (has permission to moderate their own post)
+        post_owner = False
+        if not is_comment_author:
+            post = supabase.table("posts").select("user_id").eq("id", post_id).single().execute()
+            post_owner = post.data and post.data["user_id"] == user.id
+        
+        # Allow delete if user is either comment author or post owner
+        if not (is_comment_author or post_owner):
+            raise HTTPException(
+                status_code=403, 
+                detail="Not authorized to delete this comment. You must be either the comment author or the post owner."
+            )
+            
+        # Delete the comment
+        supabase.table("comments").delete().eq("id", comment_id).execute()
+        return None
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=404, detail=f"Error deleting comment: {str(e)}")

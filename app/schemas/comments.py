@@ -30,6 +30,6 @@ class CommentOut(BaseModel):
     post_id: str
     user_id: str
     content: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: str
+    parent_comment_id: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
