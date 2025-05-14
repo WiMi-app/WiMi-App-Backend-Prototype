@@ -13,6 +13,13 @@ class RepetitionType(str, Enum):
     CUSTOM = "custom"
 
 
+class ParticipationStatus(str, Enum):
+    """Enum for challenge participation status"""
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    DROPPED = "dropped"
+
+
 class ChallengeBase(BaseModel):
     """
     Base schema for challenge data.
@@ -88,4 +95,15 @@ class ChallengeOut(ChallengeBase):
     creator_id: str
     created_at: str
     updated_at: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ChallengeParticipantOut(BaseModel):
+    """
+    Schema for challenge participant data returned by the API.
+    """
+    challenge_id: str
+    user_id: str
+    joined_at: str
+    status: ParticipationStatus
     model_config = ConfigDict(from_attributes=True)
