@@ -60,3 +60,9 @@ class PostOut(BaseModel):
     edited: bool
     challenge_id: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+
+class SavedPostCreate(BaseModel):
+    """
+    Schema for saving a post.
+    """
+    post_id: str = Field(..., description="ID of the post to save")
