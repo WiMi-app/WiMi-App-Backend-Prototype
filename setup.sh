@@ -18,7 +18,7 @@ done
 # Create virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
-    python12 -m venv venv
+    python3.12 -m venv venv
     echo "Virtual environment created."
 fi
 
