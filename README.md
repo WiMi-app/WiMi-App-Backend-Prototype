@@ -28,6 +28,14 @@ API documentation is automatically generated at:
 - http://localhost:8000/docs (Swagger UI)
 - http://localhost:8000/redoc (ReDoc)
 
+### Database Schema Update
+
+To update the database schema for the endorsement feature:
+
+```
+python scripts/update_db_endorsements.py
+```
+
 ## API Endpoints
 
 ### Authentication
@@ -56,4 +64,53 @@ API documentation is automatically generated at:
 - `POST /api/v1/likes/`: Like a post or comment
 - `DELETE /api/v1/likes/post/{post_id}`: Unlike a post
 - `DELETE /api/v1/likes/comment/{comment_id}`: Unlike a comment
+
+### Endorsements
+- `POST /api/v1/endorsements?post_id={post_id}`: Request endorsements for a post (automatically selects 3 random friends)
+- `GET /api/v1/endorsements/post/{post_id}`: Get all endorsements for a post
+- `GET /api/v1/endorsements/pending`: Get pending endorsement requests for the current user
+- `PUT /api/v1/endorsements/{endorsement_id}`: Update an endorsement (endorse or decline with selfie)
+
+## Post Endorsement System
+
+The endorsement system adds a layer of authenticity verification to posts:
+
+1. **Endorsement Request**: When a user creates a post, they can request endorsements from friends.
+   - The system automatically selects 3 random mutual friends (users who follow each other).
+   - Selected friends receive a notification about the endorsement request.
+
+2. **Endorsement Process**:
+   - Friends must take a selfie to endorse the post, verifying their identity.
+   - Friends can either approve (with selfie) or decline the endorsement request.
+   - All selfies taken by endorsers are linked to the post they endorse.
+
+3. **Endorsement Status**:
+   - A post is marked as "endorsed" when all three friends complete their endorsements.
+   - Posts include endorsement information in their response, including count of endorsed and pending endorsements.
+
+This feature helps ensure post authenticity by requiring verification from multiple trusted connections.
+
+## User Management
+
+### Deleting Users
+
+The API includes an endpoint to delete users from both the `auth.users` and `public.users` tables:
+
+```
+DELETE /api/v0/users/{user_id}
+```
+
+This endpoint requires authentication, and users can only delete their own accounts.
+
+To test this functionality, you can use the provided script:
+
+```bash
+# Delete your own account
+python scripts/delete_user.py user@example.com password123
+
+# Delete a specific user (if authorized)
+python scripts/delete_user.py user@example.com password123 715ed5db-f090-4b8c-a067-640ecee36aa0
+```
+
+Note: This operation completely removes the user and all associated data from the system. This action cannot be undone.
 

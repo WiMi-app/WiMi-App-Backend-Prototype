@@ -1,20 +1,35 @@
-from app.schemas.auth import Token, UserLogin, UserSignUp
-from app.schemas.challenges import (ChallengeCreate, ChallengeOut,
-                                    ChallengeUpdate)
-from app.schemas.comments import CommentCreate, CommentOut, CommentUpdate
+from datetime import datetime
+from typing import Dict, Optional, Union
+from uuid import UUID
+
+from fastapi.encoders import jsonable_encoder
+from pydantic import BaseModel, Field
+
+from app.schemas.auth import Token
+from app.schemas.challenges import (ChallengeBase, 
+                                    ChallengeCreate, ChallengeOut,
+                                    ChallengeParticipantOut, ChallengeUpdate)
+from app.schemas.comments import CommentCreate, CommentOut
+from app.schemas.endorsements import (EndorsementCreate, EndorsementOut,
+                                      EndorsementStatus, EndorsementUpdate)
 from app.schemas.follows import FollowCreate, FollowOut
 from app.schemas.hashtags import HashtagOut
 from app.schemas.likes import LikeCreate, LikeOut
-from app.schemas.notifications import NotificationOut
-from app.schemas.posts import PostCreate, PostOut, PostUpdate
+from app.schemas.notifications import (NotificationOut, NotificationStatus,
+                                       NotificationType)
+from app.schemas.posts import PostCreate, PostOut, PostUpdate, SavedPostCreate
 from app.schemas.users import UserBase, UserOut, UserUpdate
 
-__all__ = ["UserOut", "UserUpdate", "UserBase", 
-           "UserSignUp", "UserLogin", "Token",
-           "ChallengeCreate", "ChallengeUpdate", "ChallengeOut",
-           "CommentCreate", "CommentUpdate", "CommentOut",
-           "LikeCreate", "LikeOut",
-           "NotificationOut",
-           "PostCreate", "PostUpdate", "PostOut",
-           "FollowCreate", "FollowOut",
-           "HashtagOut"]
+# Export the models for easy access
+__all__ = [
+    "Token", "TokenData",
+    "UserBase", "UserOut", "UserUpdate",
+    "PostCreate", "PostOut", "PostUpdate", "SavedPostCreate",
+    "CommentCreate", "CommentOut",
+    "LikeCreate", "LikeOut",
+    "FollowCreate", "FollowOut","HashtagOut",
+    "NotificationOut", "NotificationStatus", "NotificationType",
+    "ChallengeBase", "ChallengeCreate", "ChallengeOut", "ChallengeUpdate",
+    "ChallengeParticipantOut",
+    "EndorsementCreate", "EndorsementOut", "EndorsementUpdate", "EndorsementStatus"
+]

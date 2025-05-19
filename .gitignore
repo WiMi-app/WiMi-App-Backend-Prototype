@@ -43,4 +43,3 @@ logs/
 htmlcov/
 .pytest_cache/
 *.pdf
-*.md

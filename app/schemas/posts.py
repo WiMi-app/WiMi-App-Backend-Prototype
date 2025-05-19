@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import Optional, Union
+from typing import List, Optional, Union
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class PostBase(BaseModel):
@@ -24,7 +24,7 @@ class PostCreate(BaseModel):
     challenge_id: Optional[str] = Field(None, description="Associated challenge ID (must be a valid UUID)")
     categories: Optional[list[str]] = Field(None, description="Categories for the post")
     
-    @validator('challenge_id')
+    @field_validator('challenge_id')
     def validate_uuid(cls, v):
         if v is None or v == "":
             return None
@@ -44,6 +44,16 @@ class PostUpdate(BaseModel):
     location: Optional[str] = Field(None, description="Location associated with the post")
     is_private: Optional[bool] = Field(None, description="Whether the post is private")
 
+class PostEndorsementInfo(BaseModel):
+    """
+    Schema for post endorsement information.
+    """
+    is_endorsed: bool = Field(False, description="Whether the post is fully endorsed")
+    endorsement_count: int = Field(0, description="Number of endorsements received")
+    pending_endorsement_count: int = Field(0, description="Number of pending endorsements")
+    endorser_ids: List[str] = Field([], description="IDs of users who have endorsed the post")
+    model_config = ConfigDict(from_attributes=True)
+
 class PostOut(BaseModel):
     """
     Schema for post data returned by the API.
@@ -59,6 +69,8 @@ class PostOut(BaseModel):
     updated_at: str
     edited: bool
     challenge_id: Optional[str] = None
+    is_endorsed: bool = False
+    endorsement_info: Optional[PostEndorsementInfo] = None
     model_config = ConfigDict(from_attributes=True)
 
 class SavedPostCreate(BaseModel):

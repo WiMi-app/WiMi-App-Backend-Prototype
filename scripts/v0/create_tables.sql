@@ -5,6 +5,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TYPE repetition_type AS ENUM ('daily', 'weekly', 'monthly', 'custom');
 CREATE TYPE achievement_type AS ENUM ('success_rate', 'completion');
 CREATE TYPE participation_status AS ENUM ('active', 'completed', 'dropped');
+CREATE TYPE endorsement_status AS ENUM ('pending', 'endorsed', 'declined');
 
 -- Users Table
 CREATE TABLE public.users (
@@ -27,7 +28,8 @@ CREATE TABLE public.posts (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     edited BOOLEAN DEFAULT FALSE,
-    challenge_id UUID
+    challenge_id UUID,
+    is_endorsed BOOLEAN DEFAULT FALSE
 );
 
 -- Comments Table
@@ -166,6 +168,18 @@ CREATE TABLE public.post_categories (
     CONSTRAINT post_category_unique UNIQUE (post_id, category)
 );
 
+-- Post Endorsements Table
+CREATE TABLE public.post_endorsements (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    post_id UUID NOT NULL REFERENCES public.posts(id) ON DELETE CASCADE,
+    endorser_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    status endorsement_status DEFAULT 'pending',
+    selfie_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    endorsed_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT unique_post_endorser UNIQUE (post_id, endorser_id)
+);
+
 -- Add foreign key for challenge_id in posts table (for circular reference)
 ALTER TABLE public.posts
 ADD CONSTRAINT fk_posts_challenge
@@ -185,3 +199,5 @@ CREATE INDEX idx_challenge_posts_challenge_id ON public.challenge_posts(challeng
 CREATE INDEX idx_challenge_achievements_challenge_id ON public.challenge_achievements(challenge_id);
 CREATE INDEX idx_challenge_achievements_user_id ON public.challenge_achievements(user_id);
 CREATE INDEX idx_posts_challenge_id ON public.posts(challenge_id);
+CREATE INDEX idx_post_endorsements_post_id ON public.post_endorsements(post_id);
+CREATE INDEX idx_post_endorsements_endorser_id ON public.post_endorsements(endorser_id);

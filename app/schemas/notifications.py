@@ -12,6 +12,8 @@ class NotificationType(str, Enum):
     COMMENT = "comment"
     FOLLOW = "follow"
     MENTION = "mention"
+    ENDORSEMENT_REQUEST = "endorsement_request"
+    POST_ENDORSED = "post_endorsed"
     
 class NotificationStatus(str, Enum):
     """

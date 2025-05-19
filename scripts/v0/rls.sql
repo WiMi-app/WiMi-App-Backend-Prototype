@@ -14,6 +14,7 @@ ALTER TABLE public.challenge_posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.challenge_achievements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.challenge_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.post_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.post_endorsements ENABLE ROW LEVEL SECURITY;
 
 -- Users Table Policies
 -- Anyone can view user profiles
@@ -385,6 +386,45 @@ CREATE POLICY "Post creators can manage post categories"
         EXISTS (
             SELECT 1 FROM public.posts
             WHERE posts.id = post_categories.post_id
+            AND posts.user_id = auth.uid()
+        )
+    );
+
+-- Post Endorsements Table Policies
+-- Anyone can view endorsements for public posts
+CREATE POLICY "Endorsements are viewable for public posts"
+    ON public.post_endorsements FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.posts
+            WHERE posts.id = post_endorsements.post_id
+            AND (NOT posts.is_private OR posts.user_id = auth.uid())
+        )
+    );
+
+-- Users can create endorsement requests for their own posts
+CREATE POLICY "Users can create endorsement requests for their own posts"
+    ON public.post_endorsements FOR INSERT
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.posts
+            WHERE posts.id = post_endorsements.post_id
+            AND posts.user_id = auth.uid()
+        )
+    );
+
+-- Endorsers can update their own endorsements
+CREATE POLICY "Endorsers can update their own endorsements"
+    ON public.post_endorsements FOR UPDATE
+    USING (endorser_id = auth.uid());
+
+-- Post owners can delete endorsement requests for their posts
+CREATE POLICY "Post owners can delete endorsement requests"
+    ON public.post_endorsements FOR DELETE
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.posts
+            WHERE posts.id = post_endorsements.post_id
             AND posts.user_id = auth.uid()
         )
     );

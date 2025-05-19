@@ -10,4 +10,5 @@ DELETE FROM public.posts;
 DELETE FROM public.follows;
 DELETE FROM public.challenges;
 DELETE FROM public.users;
+DELETE FROM public.post_endorsements;
 DELETE FROM auth.users;

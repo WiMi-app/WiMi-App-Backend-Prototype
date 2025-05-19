@@ -3,13 +3,14 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.config import supabase
-from app.core.deps import get_current_user
-from app.schemas.posts import PostCreate, PostOut, PostUpdate
+from app.core.deps import get_current_user, get_supabase
+from app.schemas.posts import (PostCreate, PostEndorsementInfo, PostOut,
+                               PostUpdate)
 
 router = APIRouter(tags=["posts"])
 
 @router.post("/", response_model=PostOut, status_code=status.HTTP_201_CREATED)
-async def create_post(payload: PostCreate, user=Depends(get_current_user)):
+async def create_post(payload: PostCreate, user=Depends(get_current_user), supabase=Depends(get_supabase)):
     """
     Create a new post.
     
@@ -34,7 +35,8 @@ async def create_post(payload: PostCreate, user=Depends(get_current_user)):
         "is_private": payload.is_private if hasattr(payload, "is_private") else False,
         "created_at": now,
         "updated_at": now,
-        "edited": False
+        "edited": False,
+        "is_endorsed": False
     }
     
     # Only add challenge_id if it's a valid value and not None or empty string
@@ -60,23 +62,53 @@ async def create_post(payload: PostCreate, user=Depends(get_current_user)):
                 }
                 supabase.table("post_categories").insert(category_data).execute()
         
+        # Add empty endorsement info
+        post["endorsement_info"] = {
+            "is_endorsed": False,
+            "endorsement_count": 0,
+            "pending_endorsement_count": 0,
+            "endorser_ids": []
+        }
+        
         return post
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error creating post: {str(e)}")
 
 @router.get("/", response_model=list[PostOut])
-async def list_posts():
+async def list_posts(supabase=Depends(get_supabase)):
     """
     List all posts.
     
     Returns:
         list[PostOut]: List of post objects
     """
+    # Get all posts
     resp = supabase.table("posts").select("*").execute()
-    return resp.data
+    posts = resp.data
+    
+    # Add endorsement info to each post
+    for post in posts:
+        # Get endorsements for this post
+        endorsements = supabase.table("post_endorsements")\
+            .select("*")\
+            .eq("post_id", post["id"])\
+            .execute()
+            
+        endorsed_count = sum(1 for e in endorsements.data if e["status"] == "endorsed")
+        pending_count = sum(1 for e in endorsements.data if e["status"] == "pending")
+        endorser_ids = [e["endorser_id"] for e in endorsements.data if e["status"] == "endorsed"]
+        
+        post["endorsement_info"] = {
+            "is_endorsed": post.get("is_endorsed", False),
+            "endorsement_count": endorsed_count,
+            "pending_endorsement_count": pending_count,
+            "endorser_ids": endorser_ids
+        }
+    
+    return posts
 
 @router.get("/{post_id}", response_model=PostOut)
-async def get_post(post_id: str):
+async def get_post(post_id: str, supabase=Depends(get_supabase)):
     """
     Get a specific post by ID.
     
@@ -91,12 +123,31 @@ async def get_post(post_id: str):
     """
     try:
         resp = supabase.table("posts").select("*").eq("id", post_id).single().execute()
-        return resp.data
+        post = resp.data
+        
+        # Get endorsements for this post
+        endorsements = supabase.table("post_endorsements")\
+            .select("*")\
+            .eq("post_id", post_id)\
+            .execute()
+            
+        endorsed_count = sum(1 for e in endorsements.data if e["status"] == "endorsed")
+        pending_count = sum(1 for e in endorsements.data if e["status"] == "pending")
+        endorser_ids = [e["endorser_id"] for e in endorsements.data if e["status"] == "endorsed"]
+        
+        post["endorsement_info"] = {
+            "is_endorsed": post.get("is_endorsed", False),
+            "endorsement_count": endorsed_count,
+            "pending_endorsement_count": pending_count,
+            "endorser_ids": endorser_ids
+        }
+        
+        return post
     except Exception as e:
         raise HTTPException(status_code=404, detail="Post not found")
 
 @router.put("/{post_id}", response_model=PostOut)
-async def update_post(post_id: str, payload: PostUpdate, user=Depends(get_current_user)):
+async def update_post(post_id: str, payload: PostUpdate, user=Depends(get_current_user), supabase=Depends(get_supabase)):
     """
     Update a post.
     
@@ -126,16 +177,35 @@ async def update_post(post_id: str, payload: PostUpdate, user=Depends(get_curren
         
         supabase.table("posts").update(update_data).eq("id", post_id).execute()
         
-        # Return updated post
+        # Return updated post with endorsement info
         updated_post = supabase.table("posts").select("*").eq("id", post_id).single().execute()
-        return updated_post.data
+        post = updated_post.data
+        
+        # Get endorsements for this post
+        endorsements = supabase.table("post_endorsements")\
+            .select("*")\
+            .eq("post_id", post_id)\
+            .execute()
+            
+        endorsed_count = sum(1 for e in endorsements.data if e["status"] == "endorsed")
+        pending_count = sum(1 for e in endorsements.data if e["status"] == "pending")
+        endorser_ids = [e["endorser_id"] for e in endorsements.data if e["status"] == "endorsed"]
+        
+        post["endorsement_info"] = {
+            "is_endorsed": post.get("is_endorsed", False),
+            "endorsement_count": endorsed_count,
+            "pending_endorsement_count": pending_count,
+            "endorser_ids": endorser_ids
+        }
+        
+        return post
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=404, detail="Post not found")
 
 @router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_post(post_id: str, user=Depends(get_current_user)):
+async def delete_post(post_id: str, user=Depends(get_current_user), supabase=Depends(get_supabase)):
     """
     Delete a post.
     

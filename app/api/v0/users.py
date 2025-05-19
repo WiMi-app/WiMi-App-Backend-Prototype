@@ -1,12 +1,15 @@
+import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, status
+from fastapi.responses import JSONResponse
 
 from app.core.config import supabase
 from app.core.deps import get_current_user
 from app.schemas.users import UserOut, UserUpdate
 
 router = APIRouter(tags=["users"])
+logger = logging.getLogger(__name__)
 
 @router.get(f"/me", response_model=UserOut)
 async def read_current_user(user=Depends(get_current_user)):
@@ -84,4 +87,59 @@ async def update_user(payload: UserUpdate, user=Depends(get_current_user)):
         .select("id,username,full_name,avatar_url,email")\
         .eq("id", user.id)\
         .single().execute().data
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(user_id: str, current_user=Depends(get_current_user)):
+    """
+    Delete a user completely from the system including auth.users and public.users tables.
+    
+    This is an admin-level operation and requires a service_role key.
+    The user's data will be completely removed from the system.
+    
+    Args:
+        user_id (str): UUID of the user to delete
+        current_user: Current authenticated user (for authorization)
+        
+    Returns:
+        None: 204 No Content response
+        
+    Raises:
+        HTTPException: 403 if not authorized
+        HTTPException: 404 if user not found
+        HTTPException: 500 if deletion fails
+    """
+    try:
+        # Only allow admins to delete users
+        # In a real system you would have proper admin checks
+        # This is a simplified check - in practice, implement proper RBAC
+        if current_user.id != user_id:
+            logger.warning(f"Unauthorized delete attempt: {current_user.id} tried to delete {user_id}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="Not authorized to delete other users"
+            )
+            
+        # Check if user exists in public.users table
+        user_exists = supabase.table("users").select("id").eq("id", user_id).execute()
+        
+        if not user_exists.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+        # Delete from public.users first
+        logger.info(f"Deleting user {user_id} from public.users table")
+        supabase.table("users").delete().eq("id", user_id).execute()
+        
+        # Delete from auth.users using the admin API
+        logger.info(f"Deleting user {user_id} from auth.users table")
+        supabase.auth.admin.delete_user(user_id)
+        
+        return None
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting user {user_id}: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete user: {str(e)}"
+        )
         

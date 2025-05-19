@@ -28,8 +28,8 @@ class ChallengeBase(BaseModel):
     title: str = Field(
         ..., min_length=3, max_length=255, description="Challenge title"
     )
-    description: Optional[str] = Field(
-        None, description="Optional challenge details"
+    description: str = Field(
+        None, description="Challenge details"
     )
     due_date: Optional[datetime] = Field(
         None, description="When the challenge ends"
@@ -52,7 +52,7 @@ class ChallengeBase(BaseModel):
     check_in_time: Optional[time] = Field(
         None, description="Time of day for check-ins"
     )
-    is_private: Optional[bool] = Field(
+    is_private: bool = Field(
         False, description="Whether the challenge is private"
     )
     time_window: Optional[int] = Field(
