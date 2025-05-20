@@ -1,27 +1,26 @@
 # Core web framework
-fastapi==0.109.1
-uvicorn[standard]==0.26.0
+fastapi
+uvicorn
 
 # Pydantic for data validation
-pydantic==2.5.3
-pydantic-settings==2.1.0
-email-validator==2.1.0
+pydantic
+pydantic-settings
+email-validator
 
 # Database and authentication
-supabase==2.3.1
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-bcrypt>=3.1.0,<4.0.0
-
+supabase
+python-jose
+passlib
+bcrypt
 # HTTP and API tools
 httpx
-python-multipart==0.0.7
-python-dotenv==1.0.0
-requests==2.32.3
+python-multipart
+python-dotenv
+requests
 
 # Testing
-pytest==7.4.4
-pytest-asyncio==0.23.3
+pytest
+pytest-asyncio
 
 # AI and advanced features
-openai==1.16.0 
+openai
