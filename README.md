@@ -36,6 +36,65 @@ To update the database schema for the endorsement feature:
 python scripts/update_db_endorsements.py
 ```
 
+## Deploying to Google Cloud Run
+
+Follow these steps to deploy the application to Google Cloud Run:
+
+1. Make sure you have the Google Cloud SDK installed and configured:
+   ```bash
+   gcloud auth login
+   gcloud config set project YOUR_PROJECT_ID
+   ```
+
+2. Build and push the Docker image to Google Container Registry:
+   ```bash
+   gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/wimi-backend
+   ```
+
+3. Deploy to Cloud Run:
+   ```bash
+   gcloud run deploy wimi-backend \
+     --image gcr.io/YOUR_PROJECT_ID/wimi-backend \
+     --platform managed \
+     --region us-central1 \
+     --allow-unauthenticated \
+     --set-env-vars="ENVIRONMENT=production" \
+     --set-env-vars="PORT=8080"
+   ```
+
+4. Set required environment variables:
+   - In the Google Cloud Console, go to Cloud Run
+   - Select your service
+   - Click "Edit & Deploy New Revision"
+   - Add all required environment variables (SUPABASE_URL, SUPABASE_KEY, JWT_SECRET, etc.)
+
+> **Note**: For production, consider using Secret Manager for sensitive environment variables.
+
+## Media Storage Buckets
+
+The application uses Supabase Storage for media files, organized in three buckets:
+
+1. **avatars**: User profile images
+   - Uploads automatically organized by user ID
+   - Endpoints: `/api/v0/users/me/avatar` (file upload) and `/api/v0/users/me/avatar/base64` (base64 upload)
+
+2. **post_media**: Images and media for posts
+   - Uploads organized by user ID
+   - Endpoints: `/api/v0/posts/media` (file upload) and `/api/v0/posts/media/base64` (base64 upload)
+   - Create posts with media using `/api/v0/posts/with-media`
+
+3. **endorsements**: Selfie verification images for post endorsements
+   - Organized by endorsement ID and user ID
+   - Upload when endorsing: `/api/v0/endorsements/{endorsement_id}` (with form data)
+   - Separate selfie uploads: `/api/v0/endorsements/{endorsement_id}/selfie` (file) and `/api/v0/endorsements/{endorsement_id}/selfie/base64` (base64)
+
+### Media Upload Limits
+
+- Maximum upload size: 20MB per file
+- Supported formats: JPEG, PNG, GIF
+- All uploads require authentication
+- Old media is automatically deleted when replaced
+
 ## API Endpoints
 
 ### Authentication
@@ -46,6 +105,8 @@ python scripts/update_db_endorsements.py
 ### Users
 - `GET /api/v1/users/me`: Get current user info
 - `PUT /api/v1/users/me`: Update current user info
+- `POST /api/v1/users/me/avatar`: Upload user avatar (file upload)
+- `POST /api/v1/users/me/avatar/base64`: Upload user avatar (base64)
 - `GET /api/v1/users/{username}`: Get user by username
 - `GET /api/v1/users/{username}/posts`: Get posts by username
 - `POST /api/v1/users/follow`: Follow a user
@@ -53,6 +114,9 @@ python scripts/update_db_endorsements.py
 
 ### Posts
 - `POST /api/v1/posts/`: Create a new post with a real-time photo
+- `POST /api/v1/posts/with-media`: Create a post with uploaded media files
+- `POST /api/v1/posts/media`: Upload media files for posts
+- `POST /api/v1/posts/media/base64`: Upload base64 encoded media for posts
 - `GET /api/v1/posts/`: Get all posts with optional filtering
 - `GET /api/v1/posts/{post_id}`: Get a specific post
 - `PUT /api/v1/posts/{post_id}`: Update a post
@@ -70,6 +134,8 @@ python scripts/update_db_endorsements.py
 - `GET /api/v1/endorsements/post/{post_id}`: Get all endorsements for a post
 - `GET /api/v1/endorsements/pending`: Get pending endorsement requests for the current user
 - `PUT /api/v1/endorsements/{endorsement_id}`: Update an endorsement (endorse or decline with selfie)
+- `POST /api/v1/endorsements/{endorsement_id}/selfie`: Upload a selfie for an endorsement
+- `POST /api/v1/endorsements/{endorsement_id}/selfie/base64`: Upload a base64 encoded selfie for an endorsement
 
 ## Post Endorsement System
 

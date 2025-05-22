@@ -1,13 +1,15 @@
 import random
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import (APIRouter, Depends, File, Form, HTTPException, UploadFile,
+                     status)
 
 from app.core.config import supabase
 from app.core.deps import get_current_user, get_supabase
+from app.core.media import delete_file, upload_base64_image, upload_file
 from app.schemas.endorsements import (EndorsementCreate, EndorsementOut,
-                                      EndorsementUpdate)
+                                      EndorsementStatus, EndorsementUpdate)
 from app.schemas.notifications import NotificationType
 
 router = APIRouter(tags=["endorsements"])
@@ -208,18 +210,164 @@ def get_pending_endorsements(
     response_model=EndorsementOut,
     summary="Update an endorsement (endorse or decline)",
 )
-def update_endorsement(
+async def update_endorsement(
     endorsement_id: str,
-    payload: EndorsementUpdate,
+    status: EndorsementStatus = Form(...),
+    selfie: Optional[UploadFile] = File(None),
     current_user=Depends(get_current_user),
     supabase=Depends(get_supabase),
 ):
     """
-    Update an endorsement status (endorse or decline).
+    Update an endorsement status (endorse or decline) with selfie.
     
     Args:
         endorsement_id (str): UUID of the endorsement to update
-        payload (EndorsementUpdate): Updated endorsement data
+        status (EndorsementStatus): New status of the endorsement
+        selfie (UploadFile, optional): Selfie image for endorsement verification
+        current_user: Current authenticated user from token
+        supabase: Supabase client instance
+        
+    Returns:
+        EndorsementOut: The updated endorsement
+        
+    Raises:
+        HTTPException: 400 if no selfie provided with "endorsed" status
+        HTTPException: 403 if user is not the endorser
+        HTTPException: 404 if endorsement not found
+    """
+    try:
+        # Check if endorsement exists and belongs to current user
+        endorsement = supabase.table("post_endorsements")\
+            .select("*")\
+            .eq("id", endorsement_id)\
+            .execute()
+            
+        if not endorsement.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Endorsement not found")
+            
+        if endorsement.data[0]["endorser_id"] != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the endorser can update this endorsement"
+            )
+        
+        # If status is endorsed, a selfie must be provided
+        if status == EndorsementStatus.ENDORSED and selfie is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A selfie is required to endorse a post"
+            )
+            
+        # Delete old selfie if it exists
+        if endorsement.data[0].get("selfie_url"):
+            try:
+                delete_file("endorsements", endorsement.data[0]["selfie_url"])
+            except Exception as e:
+                # Log error but continue with upload
+                print(f"Failed to delete old selfie: {str(e)}")
+            
+        # Prepare update data
+        now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")
+        update_data = {
+            "status": status,
+            "updated_at": now
+        }
+        
+        if status == EndorsementStatus.ENDORSED:
+            update_data["endorsed_at"] = now
+            
+            # Upload selfie
+            selfie_url = await upload_file("endorsements", selfie, current_user.id, folder=endorsement_id)
+            update_data["selfie_url"] = selfie_url
+        
+        # Update endorsement
+        result = supabase.table("post_endorsements")\
+            .update(update_data)\
+            .eq("id", endorsement_id)\
+            .execute()
+            
+        updated_endorsement = result.data[0]
+        
+        # If all endorsements are completed, update post status
+        post_id = endorsement.data[0]["post_id"]
+        all_endorsements = supabase.table("post_endorsements")\
+            .select("*")\
+            .eq("post_id", post_id)\
+            .execute()
+            
+        # Count endorsed
+        endorsed_count = sum(1 for e in all_endorsements.data if e["status"] == "endorsed")
+        
+        # If all endorsements are complete, mark post as endorsed
+        if endorsed_count >= 3:
+            supabase.table("posts")\
+                .update({"is_endorsed": True, "updated_at": now})\
+                .eq("id", post_id)\
+                .execute()
+            
+            # Notify post owner that the post is fully endorsed
+            post = supabase.table("posts").select("user_id").eq("id", post_id).single().execute()
+            
+            if post.data:
+                # Create notification for post owner
+                notification_data = {
+                    "type": "endorsement_complete",
+                    "user_id": post.data["user_id"],
+                    "triggered_by_user_id": current_user.id,
+                    "post_id": post_id,
+                    "message": "Your post has been fully endorsed!",
+                    "is_read": False,
+                    "created_at": now
+                }
+                
+                supabase.table("notifications").insert(notification_data).execute()
+            
+        # Notify post owner about the endorsement update
+        post = supabase.table("posts").select("user_id").eq("id", post_id).single().execute()
+        
+        if post.data and post.data["user_id"] != current_user.id:
+            notification_type = "endorsement_accepted" if status == "endorsed" else "endorsement_declined"
+            notification_message = f"{current_user.username} {'endorsed' if status == 'endorsed' else 'declined to endorse'} your post"
+            
+            notification_data = {
+                "type": notification_type,
+                "user_id": post.data["user_id"],
+                "triggered_by_user_id": current_user.id,
+                "post_id": post_id,
+                "endorsement_id": endorsement_id,
+                "message": notification_message,
+                "is_read": False,
+                "created_at": now
+            }
+            
+            supabase.table("notifications").insert(notification_data).execute()
+            
+        return updated_endorsement
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error updating endorsement: {str(e)}"
+        )
+
+@router.post(
+    "/{endorsement_id}/selfie",
+    response_model=EndorsementOut,
+    summary="Upload a selfie for an endorsement",
+)
+async def upload_endorsement_selfie(
+    endorsement_id: str,
+    selfie: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    """
+    Upload a selfie for an endorsement.
+    
+    Args:
+        endorsement_id (str): UUID of the endorsement
+        selfie (UploadFile): Selfie image file
         current_user: Current authenticated user from token
         supabase: Supabase client instance
         
@@ -243,77 +391,100 @@ def update_endorsement(
         if endorsement.data[0]["endorser_id"] != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the endorser can update this endorsement"
+                detail="Only the endorser can upload a selfie for this endorsement"
             )
             
-        # Prepare update data
-        now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")
-        update_data = {
-            "status": payload.status,
-        }
-        
-        # If status is 'endorsed', add selfie URL and endorsed_at timestamp
-        if payload.status == "endorsed":
-            if not payload.selfie_url:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Selfie URL is required for endorsement"
-                )
+        # Delete old selfie if it exists
+        if endorsement.data[0].get("selfie_url"):
+            try:
+                delete_file("endorsements", endorsement.data[0]["selfie_url"])
+            except Exception as e:
+                # Log error but continue with upload
+                print(f"Failed to delete old selfie: {str(e)}")
                 
-            update_data["selfie_url"] = payload.selfie_url
-            update_data["endorsed_at"] = now
-            
-        # Update the endorsement
+        # Upload new selfie
+        selfie_url = await upload_file("endorsements", selfie, current_user.id, folder=endorsement_id)
+        
+        # Update endorsement
         result = supabase.table("post_endorsements")\
-            .update(update_data)\
+            .update({"selfie_url": selfie_url})\
             .eq("id", endorsement_id)\
             .execute()
             
-        updated_endorsement = result.data[0]
-        
-        # If the endorsement was approved, check if all 3 endorsements are complete
-        if payload.status == "endorsed":
-            post_id = endorsement.data[0]["post_id"]
-            
-            # Get all endorsements for the post
-            all_endorsements = supabase.table("post_endorsements")\
-                .select("*")\
-                .eq("post_id", post_id)\
-                .execute()
-                
-            # Check if all required endorsements are complete
-            endorsed_count = sum(1 for e in all_endorsements.data if e["status"] == "endorsed")
-            
-            if endorsed_count >= 3:
-                # Update post to mark as endorsed
-                supabase.table("posts")\
-                    .update({"is_endorsed": True})\
-                    .eq("id", post_id)\
-                    .execute()
-                    
-                # Get post owner to send notification
-                post = supabase.table("posts").select("user_id").eq("id", post_id).execute()
-                post_owner_id = post.data[0]["user_id"]
-                
-                # Send notification to post owner
-                notification_data = {
-                    "type": "post_endorsed",
-                    "user_id": post_owner_id,
-                    "triggered_by_user_id": current_user.id,
-                    "post_id": post_id,
-                    "message": "Your post has been fully endorsed!",
-                    "is_read": False,
-                    "created_at": now,
-                    "status": "pending"
-                }
-                
-                supabase.table("notifications").insert(notification_data).execute()
-                
-        return updated_endorsement
+        return result.data[0]
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error updating endorsement: {str(e)}"
+            detail=f"Error uploading selfie: {str(e)}"
+        )
+
+@router.post(
+    "/{endorsement_id}/selfie/base64",
+    response_model=EndorsementOut,
+    summary="Upload a base64 encoded selfie for an endorsement",
+)
+async def upload_endorsement_selfie_base64(
+    endorsement_id: str,
+    base64_image: str = Form(...),
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+):
+    """
+    Upload a base64 encoded selfie for an endorsement.
+    
+    Args:
+        endorsement_id (str): UUID of the endorsement
+        base64_image (str): Base64 encoded image data
+        current_user: Current authenticated user from token
+        supabase: Supabase client instance
+        
+    Returns:
+        EndorsementOut: The updated endorsement
+        
+    Raises:
+        HTTPException: 403 if user is not the endorser
+        HTTPException: 404 if endorsement not found
+    """
+    try:
+        # Check if endorsement exists and belongs to current user
+        endorsement = supabase.table("post_endorsements")\
+            .select("*")\
+            .eq("id", endorsement_id)\
+            .execute()
+            
+        if not endorsement.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Endorsement not found")
+            
+        if endorsement.data[0]["endorser_id"] != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the endorser can upload a selfie for this endorsement"
+            )
+            
+        # Delete old selfie if it exists
+        if endorsement.data[0].get("selfie_url"):
+            try:
+                delete_file("endorsements", endorsement.data[0]["selfie_url"])
+            except Exception as e:
+                # Log error but continue with upload
+                print(f"Failed to delete old selfie: {str(e)}")
+                
+        # Upload new selfie
+        selfie_url = await upload_base64_image("endorsements", base64_image, current_user.id, folder=endorsement_id)
+        
+        # Update endorsement
+        result = supabase.table("post_endorsements")\
+            .update({"selfie_url": selfie_url})\
+            .eq("id", endorsement_id)\
+            .execute()
+            
+        return result.data[0]
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error uploading selfie: {str(e)}"
         ) 

@@ -1,4 +1,5 @@
 import os
+
 from pydantic import ConfigDict, Field
 from pydantic_settings import BaseSettings
 from supabase import Client, create_client
@@ -16,7 +17,7 @@ class Settings(BaseSettings):
     APP_NAME: str = Field("WiMi", env="APP_NAME")
     APP_VERSION: str = Field("0.1.0", env="APP_VERSION")
     ENVIRONMENT: str = Field("development", env="ENVIRONMENT")
-    PORT: int = Field(8000, env="PORT")
+    PORT: int = Field(8080, env="PORT")
     API_V1_STR: str = Field("/api/v0", env="API_V1_STR")
 
     # ─── Supabase ─────────────────────────────────────────────────────────────
@@ -27,7 +28,7 @@ class Settings(BaseSettings):
     OPENAI_KEY: str = Field(os.getenv("OPENAI_API_KEY"), env="OPENAI_API_KEY")
 
     # ─── JWT / Auth ───────────────────────────────────────────────────────────
-    JWT_SECRET: str = Field(os.getenv("SECRET_KEY"), env="SECRET_KEY")
+    JWT_SECRET: str = Field(os.getenv("JWT_SECRET"), env="JWT_SECRET")
     JWT_ALGORITHM: str = Field("HS256", env="ALGORITHM")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
         60, env="ACCESS_TOKEN_EXPIRE_MINUTES"

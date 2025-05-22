@@ -1,8 +1,11 @@
+import time
 import urllib.parse
 
+import jwt
 import requests
 from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwt.exceptions import InvalidTokenError
 from supabase import Client
 
 from app.core.config import settings, supabase
@@ -19,6 +22,43 @@ def get_supabase() -> Client:
         Client: Initialized Supabase client instance
     """
     return supabase
+
+def verify_jwt_token(token: str) -> dict:
+    """
+    Verify a JWT token from Supabase.
+    
+    Args:
+        token: JWT token string
+        
+    Returns:
+        dict: Decoded JWT payload
+        
+    Raises:
+        HTTPException: If token is invalid or expired
+    """
+    try:
+        # Decode and verify the token
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET,
+            algorithms=["HS256"]
+        )
+        
+        # Check if token is expired
+        if payload.get("exp") and payload.get("exp") < time.time():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token expired",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        return payload
+    except InvalidTokenError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid token: {str(e)}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
@@ -41,11 +81,11 @@ def get_current_user(
         HTTPException: 401 if token is missing or invalid
         HTTPException: 401 if user is not found
     """
-    auth_header = None
+    token = None
     
     # Try to get token from Authorization header
     if credentials:
-        auth_header = f"Bearer {credentials.credentials}"
+        token = credentials.credentials
     # Fall back to cookie if no Authorization header
     elif access_token:
         # Handle URL-encoded tokens and Bearer prefix
@@ -58,24 +98,21 @@ def get_current_user(
         # Handle "Bearer " prefix in cookie value
         if token.startswith("Bearer "):
             token = token[7:]  # Remove "Bearer " prefix
-            
-        auth_header = f"Bearer {token}"
         
-    if not auth_header:
+    if not token:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
     
-    # Validate token against Supabase GoTrue
-    url = f"{settings.SUPABASE_URL}/auth/v1/user"
-    headers = {"apikey": settings.SUPABASE_KEY, "Authorization": auth_header}
-    user_resp = requests.get(url, headers=headers)
-    if user_resp.status_code != 200:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")
-    user_data = user_resp.json()
+    # Validate JWT token
+    payload = verify_jwt_token(token)
+    user_id = payload.get("sub")
+    
+    if not user_id:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User ID not found in token")
 
     # Fetch user profile from database
     resp = supabase.table("users")\
         .select("id,username,email,full_name,avatar_url,bio,updated_at")\
-        .eq("id", user_data["id"])\
+        .eq("id", user_id)\
         .single().execute()
     if not resp.data:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found")
