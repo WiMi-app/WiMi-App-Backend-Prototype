@@ -7,7 +7,8 @@ It imports and includes routers from various feature modules with appropriate pr
 from fastapi import APIRouter
 
 from app.api.v0 import (auth, challenges, comments, endorsements, follows,
-                        likes, notifications, posts, saved_posts, users)
+                        likes, moderation, notifications, posts, saved_posts,
+                        users)
 
 api_router = APIRouter()
 
@@ -21,3 +22,4 @@ api_router.include_router(notifications.router, prefix="/notifications", tags=["
 api_router.include_router(follows.router, prefix="/follows", tags=["follows"])
 api_router.include_router(saved_posts.router, prefix="/saved-posts", tags=["saved_posts"])
 api_router.include_router(endorsements.router, prefix="/endorsements", tags=["endorsements"])
+api_router.include_router(moderation.router, prefix="/moderation", tags=["moderation"])

@@ -5,7 +5,7 @@ import jwt
 import requests
 from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jwt.exceptions import InvalidTokenError
+from jwt.exceptions import JWTDecodeError
 from supabase import Client
 
 from app.core.config import settings, supabase
@@ -53,7 +53,7 @@ def verify_jwt_token(token: str) -> dict:
             )
         
         return payload
-    except InvalidTokenError as e:
+    except JWTDecodeError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid token: {str(e)}",

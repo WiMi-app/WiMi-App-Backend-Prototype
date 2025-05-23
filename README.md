@@ -180,3 +180,52 @@ python scripts/delete_user.py user@example.com password123 715ed5db-f090-4b8c-a0
 
 Note: This operation completely removes the user and all associated data from the system. This action cannot be undone.
 
+## Content Moderation
+
+The application uses OpenAI's Moderation API to automatically screen content for:
+
+1. **Posts**: Content text is checked for harmful or inappropriate material
+2. **Challenges**: Description field is checked for harmful or inappropriate content
+
+### Moderation Rules
+
+The moderation system screens for:
+- Content with intent to harm someone
+- Material that crosses legal boundaries
+- Hate speech or discriminatory language
+- Self-harm content
+- Violence or threats
+- Sexual or inappropriate content
+- Content encouraging illegal activities
+
+### Testing Moderation
+
+Two endpoints are available for testing the moderation system:
+
+1. **Authenticated testing** (requires login):
+   ```
+   POST /api/v0/moderation/test
+   {
+     "text": "Text to check",
+     "content_type": "post" or "challenge"
+   }
+   ```
+
+2. **Public pre-check** (no auth required):
+   ```
+   POST /api/v0/moderation/check-text
+   {
+     "text": "Text to check",
+     "content_type": "post" or "challenge" 
+   }
+   ```
+
+### Environment Setup
+
+To enable content moderation, add your OpenAI API key to your environment variables:
+```
+OPENAI_API_KEY=your_api_key_here
+```
+
+The application will log a warning on startup if this key is missing.
+

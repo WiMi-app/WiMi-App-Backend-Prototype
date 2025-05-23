@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.config import supabase
 from app.core.deps import get_current_user
+from app.core.moderation import moderate_challenge
 from app.schemas.challenges import (ChallengeCreate, ChallengeOut,
                                     ChallengeParticipantOut, ChallengeUpdate,
                                     ParticipationStatus)
@@ -27,9 +28,15 @@ async def create_challenge(payload: ChallengeCreate, user=Depends(get_current_us
         ChallengeOut: Created challenge data
         
     Raises:
-        HTTPException: 400 if creation fails
+        HTTPException: 400 if creation fails or content is flagged
+        HTTPException: 403 if content violates moderation policy
     """
     try:
+        # Moderate challenge description if provided
+        if payload.description:
+            # This will raise an exception if moderation fails
+            await moderate_challenge(payload.description, raise_exception=True)
+        
         record = payload.model_dump()
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
         record.update({"creator_id": user.id, "created_at": now, "updated_at": now})
@@ -44,6 +51,9 @@ async def create_challenge(payload: ChallengeCreate, user=Depends(get_current_us
             raise HTTPException(status_code=400, detail="Failed to create challenge")
         
         return resp.data[0]
+    except HTTPException:
+        # Re-raise HTTP exceptions (including moderation failures)
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error creating challenge: {str(e)}")
 
@@ -95,7 +105,7 @@ async def update_challenge(challenge_id: str, payload: ChallengeUpdate, user=Dep
         ChallengeOut: Updated challenge data
         
     Raises:
-        HTTPException: 403 if user is not the challenge creator
+        HTTPException: 403 if user is not the challenge creator or content violates policy
         HTTPException: 404 if challenge not found
     """
     try:
@@ -104,6 +114,11 @@ async def update_challenge(challenge_id: str, payload: ChallengeUpdate, user=Dep
         
         if exists.data["creator_id"] != user.id:
             raise HTTPException(status_code=403, detail="Not authorized to update this challenge")
+        
+        # Moderate challenge description if provided
+        if payload.description:
+            # This will raise an exception if moderation fails
+            await moderate_challenge(payload.description, raise_exception=True)
             
         # Update the challenge
         update_data = payload.model_dump(exclude_unset=True)
@@ -118,9 +133,10 @@ async def update_challenge(challenge_id: str, payload: ChallengeUpdate, user=Dep
         # Return updated challenge
         updated = supabase.table("challenges").select("*").eq("id", challenge_id).single().execute()
         return updated.data
+    except HTTPException:
+        # Re-raise HTTP exceptions (including moderation failures)
+        raise
     except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
         raise HTTPException(status_code=404, detail="Challenge not found")
 
 @router.delete("/{challenge_id}", status_code=status.HTTP_204_NO_CONTENT)

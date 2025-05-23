@@ -7,6 +7,7 @@ from fastapi import (APIRouter, Depends, File, Form, HTTPException, UploadFile,
 from app.core.config import supabase
 from app.core.deps import get_current_user, get_supabase
 from app.core.media import delete_file, upload_base64_image, upload_file
+from app.core.moderation import moderate_post
 from app.schemas.posts import (PostCreate, PostEndorsementInfo, PostOut,
                                PostUpdate)
 
@@ -26,7 +27,13 @@ async def create_post(payload: PostCreate, user=Depends(get_current_user), supab
         
     Raises:
         HTTPException: 400 if creation fails
+        HTTPException: 403 if content violates moderation policy
     """
+    # Moderate post content
+    if payload.content:
+        # This will raise an exception if content violates guidelines
+        await moderate_post(payload.content, raise_exception=True)
+        
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
     
     # Create the post record
@@ -74,6 +81,9 @@ async def create_post(payload: PostCreate, user=Depends(get_current_user), supab
         }
         
         return post
+    except HTTPException:
+        # Re-raise HTTP exceptions (including moderation failures)
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error creating post: {str(e)}")
 
@@ -105,7 +115,13 @@ async def create_post_with_media(
         
     Raises:
         HTTPException: 400 if creation fails
+        HTTPException: 403 if content violates moderation policy
     """
+    # Moderate post content
+    if content:
+        # This will raise an exception if content violates guidelines
+        await moderate_post(content, raise_exception=True)
+    
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
     media_urls = []
     
@@ -166,6 +182,15 @@ async def create_post_with_media(
         }
         
         return post
+    except HTTPException:
+        # Clean up any uploaded files if exception occurs
+        for url in media_urls:
+            try:
+                delete_file("post_media", url)
+            except:
+                pass
+        # Re-raise HTTP exceptions (including moderation failures)
+        raise
     except Exception as e:
         # Clean up any uploaded files if post creation fails
         for url in media_urls:
@@ -329,6 +354,7 @@ async def update_post(post_id: str, payload: PostUpdate, user=Depends(get_curren
     Raises:
         HTTPException: 403 if user is not the post creator
         HTTPException: 404 if post not found
+        HTTPException: 400 if content violates moderation policy
     """
     try:
         # Check if post exists and belongs to user
@@ -336,8 +362,13 @@ async def update_post(post_id: str, payload: PostUpdate, user=Depends(get_curren
         
         if exists.data["user_id"] != user.id:
             raise HTTPException(status_code=403, detail="Not authorized to update this post")
+        
+        # Moderate post content if it's being updated
+        if payload.content is not None:
+            # This will raise an exception if content violates guidelines
+            await moderate_post(payload.content, raise_exception=True)
             
-            # Update the post
+        # Update the post
         update_data = payload.model_dump(exclude_unset=True)
         update_data["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
         update_data["edited"] = True
@@ -366,9 +397,10 @@ async def update_post(post_id: str, payload: PostUpdate, user=Depends(get_curren
         }
         
         return post
+    except HTTPException:
+        # Re-raise HTTP exceptions (including moderation failures)
+        raise
     except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
         raise HTTPException(status_code=404, detail="Post not found")
 
 @router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT)

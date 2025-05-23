@@ -1,6 +1,7 @@
 import logging
 import time
 
+import openai
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -138,6 +139,13 @@ async def on_startup():
     Initializes connections and resources.
     """
     logger.info("🚀 Application starting up")
+    
+    # Initialize OpenAI with API key
+    if settings.OPENAI_KEY:
+        logger.info("Initializing OpenAI client")
+        openai.api_key = settings.OPENAI_KEY
+    else:
+        logger.warning("OPENAI_API_KEY not set - content moderation will not work!")
 
 @app.on_event("shutdown")
 async def on_shutdown():
