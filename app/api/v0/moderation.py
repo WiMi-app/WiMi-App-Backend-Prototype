@@ -1,8 +1,3 @@
-"""
-Moderation API endpoints for testing and administering content moderation.
-"""
-from typing import Dict, Optional
-
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.deps import get_current_user

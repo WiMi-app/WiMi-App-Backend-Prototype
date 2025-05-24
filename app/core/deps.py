@@ -5,7 +5,7 @@ import jwt
 import requests
 from fastapi import Cookie, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jwt.exceptions import JWTDecodeError
+from jwt.exceptions import DecodeError
 from supabase import Client
 
 from app.core.config import settings, supabase
@@ -41,7 +41,8 @@ def verify_jwt_token(token: str) -> dict:
         payload = jwt.decode(
             token,
             settings.JWT_SECRET,
-            algorithms=["HS256"]
+            algorithms=[settings.JWT_ALGORITHM],
+            audience="authenticated"
         )
         
         # Check if token is expired
@@ -53,7 +54,7 @@ def verify_jwt_token(token: str) -> dict:
             )
         
         return payload
-    except JWTDecodeError as e:
+    except DecodeError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid token: {str(e)}",

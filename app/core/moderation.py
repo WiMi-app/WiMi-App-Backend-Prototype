@@ -1,25 +1,6 @@
-"""
-Content moderation utilities using OpenAI's Moderation API.
-
-This module provides functions to check content against OpenAI's content policy,
-flagging harmful content such as hate speech, self-harm, sexual content, and violence.
-
-The moderation focuses on two main areas:
-1. Detecting content that shows intent to harm someone or is too dangerous
-2. Identifying content that violates legal boundaries
-
-Usage:
-    - For challenges: Only the description field is moderated
-    - For posts: The content text is moderated
-    
-The API will automatically reject content that violates these policies
-and return appropriate error messages to the client.
-"""
 import logging
 from enum import Enum
-from typing import Dict, List, Optional, Tuple, Union
-
-import openai
+from typing import Dict, Tuple
 from fastapi import HTTPException, status
 from openai import OpenAI
 
