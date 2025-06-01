@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 
 from app.core.deps import get_current_user, get_supabase
 from app.schemas.follows import FollowCreate, FollowOut
+from app.schemas.users import UserOut
 
 router = APIRouter(tags=["follows"])
 
@@ -110,3 +111,87 @@ def unfollow_user(
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Error deleting follow relationship: {str(e)}")
+
+@router.get(
+    "/by-user/{user_id}/followers",
+    response_model=List[UserOut],
+    summary="Get followers of a specific user",
+)
+def get_user_followers(
+    user_id: str,
+    supabase=Depends(get_supabase),
+):
+    """
+    Get a list of users who follow a specific user (followers).
+
+    Args:
+        user_id (str): UUID of the user whose followers are to be fetched
+        supabase: Supabase client instance
+
+    Returns:
+        List[UserOut]: List of follower users
+
+    Raises:
+        HTTPException: 400 if database operation fails
+    """
+    try:
+        # Fetch follower_ids of users who follow the given user_id
+        follows_res = supabase.table("follows").select("follower_id").eq("followed_id", user_id).execute()
+        if not follows_res.data:
+            return []
+
+        follower_ids = [follow['follower_id'] for follow in follows_res.data]
+        if not follower_ids:
+            return []
+
+        # Fetch user details for those follower_ids
+        users_res = supabase.table("users").select("id, username, full_name, avatar_url, email, bio, updated_at").in_("id", follower_ids).execute()
+        
+        if not users_res.data:
+            return []
+            
+        return users_res.data
+    except Exception as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Error fetching followers: {str(e)}")
+
+@router.get(
+    "/by-user/{user_id}/following",
+    response_model=List[UserOut],
+    summary="Get users a specific user is following",
+)
+def get_user_following(
+    user_id: str,
+    supabase=Depends(get_supabase),
+):
+    """
+    Get a list of users whom a specific user is following.
+
+    Args:
+        user_id (str): UUID of the user whose followed list is to be fetched
+        supabase: Supabase client instance
+
+    Returns:
+        List[UserOut]: List of users being followed
+
+    Raises:
+        HTTPException: 400 if database operation fails
+    """
+    try:
+        # Fetch followed_ids of users whom the given user_id is following
+        follows_res = supabase.table("follows").select("followed_id").eq("follower_id", user_id).execute()
+        if not follows_res.data:
+            return []
+
+        followed_ids = [follow['followed_id'] for follow in follows_res.data]
+        if not followed_ids:
+            return []
+
+        # Fetch user details for those followed_ids
+        users_res = supabase.table("users").select("id, username, full_name, avatar_url, email, bio, updated_at").in_("id", followed_ids).execute()
+        
+        if not users_res.data:
+            return []
+            
+        return users_res.data
+    except Exception as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Error fetching followed users: {str(e)}")

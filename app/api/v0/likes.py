@@ -1,9 +1,11 @@
+import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 
 from app.core.deps import get_current_user, get_supabase
 from app.schemas.likes import LikeCreate, LikeOut
+from app.schemas.users import UserOut
 
 router = APIRouter(tags=["likes"])
 
@@ -96,3 +98,48 @@ def unlike_post(
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Error: {str(e)}")
+
+@router.get(
+    "/by-post/{post_id}/users",
+    response_model=List[UserOut],
+    summary="Get users who liked a specific post",
+)
+def get_users_who_liked_post(
+    post_id: str,
+    supabase=Depends(get_supabase),
+):
+    """
+    Get a list of users who liked a specific post.
+    
+    Args:
+        post_id (str): UUID of the post
+        supabase: Supabase client instance
+        
+    Returns:
+        List[UserOut]: List of users who liked the post
+        
+    Raises:
+        HTTPException: 400 if database operation fails
+        HTTPException: 404 if post not found (implicitly, if no likes exist)
+    """
+    try:
+        # Fetch user_ids of users who liked the post
+        likes_res = supabase.table("likes").select("user_id").eq("post_id", post_id).execute()
+        if not likes_res.data:
+            return [] # Return empty list if no likes for the post
+
+        user_ids = [like['user_id'] for like in likes_res.data]
+        if not user_ids:
+            return []
+
+        # Fetch user details for those user_ids
+        users_res = supabase.table("users").select("id, username, full_name, avatar_url, email, bio, updated_at").in_("id", user_ids).execute()
+        
+        if not users_res.data:
+            return []
+            
+        return users_res.data
+    except Exception as e:
+
+        logging.error(f"Error fetching users who liked post {post_id}: {str(e)}")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Error fetching users who liked post: {str(e)}")
