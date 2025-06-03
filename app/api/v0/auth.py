@@ -87,6 +87,13 @@ async def login_for_access_token(user_login: UserLogin, response: Response):
     try:
         email = user_login.email
         password = user_login.password
+        
+        # Check if user email exists
+        user_check_response = supabase.table("users").select("id").eq("email", email).execute()
+        if not user_check_response.data:
+            logger.warning(f"Login failed: Email not found - {email}")
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="An account with this email does not exist.")
+        
         logger.info(f"Login attempt for email: {email}")
         auth_resp = supabase.auth.sign_in_with_password({"email": email, "password": password})
         
