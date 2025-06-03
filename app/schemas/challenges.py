@@ -58,7 +58,9 @@ class ChallengeBase(BaseModel):
     time_window: Optional[int] = Field(
         None, description="Time window for challenge completion in minutes"
     )
-
+    background_photo: Optional[str] = Field(
+        None, description="Background photo for the challenge"
+    )
 
 class ChallengeCreate(ChallengeBase):
     """
@@ -84,7 +86,8 @@ class ChallengeUpdate(BaseModel):
     check_in_time: Optional[time] = Field(None)
     is_private: Optional[bool] = Field(None)
     time_window: Optional[int] = Field(None)
-
+    background_photo: Optional[str] = Field(None)
+    
 
 class ChallengeOut(ChallengeBase):
     """

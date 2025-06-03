@@ -44,6 +44,8 @@ async def create_challenge(payload: ChallengeCreate, user=Depends(get_current_us
         # Convert time to string if present
         if "check_in_time" in record and record["check_in_time"] is not None:
             record["check_in_time"] = record["check_in_time"].strftime("%H:%M:%S")
+        if "due_date" in record and record["due_date"] is not None:
+            record["due_date"] = record["due_date"].strftime("%Y-%m-%dT%H:%M:%S.%f")
         
         resp = supabase.table("challenges").insert(record).execute()
         
@@ -163,6 +165,7 @@ async def delete_challenge(challenge_id: str, user=Depends(get_current_user)):
             raise HTTPException(status_code=403, detail="Not authorized to delete this challenge")
             
         # Delete the challenge
+        supabase.storage.from_("challenges").delete(f"{challenge_id}/background_photo")
         supabase.table("challenges").delete().eq("id", challenge_id).execute()
         return None
     except Exception as e:
