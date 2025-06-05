@@ -8,12 +8,13 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.core.config import supabase
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_supabase
 from app.core.media import delete_file, upload_file
 from app.core.moderation import moderate_challenge
 from app.schemas.challenges import (ChallengeCreate, ChallengeOut,
                                     ChallengeParticipantOut, ChallengeUpdate,
                                     ParticipationStatus)
+from app.schemas.posts import PostOut
 
 router = APIRouter(tags=["challenges"])
 
@@ -486,3 +487,39 @@ async def upload_challenge_background_photo(
         .eq("id", challenge_id) \
         .single() \
         .execute().data
+
+@router.get("/{challenge_id}/posts", response_model=List[PostOut])
+async def list_posts_for_challenge(challenge_id: str, supabase=Depends(get_supabase)):
+    """
+    List all posts for a specific challenge.
+    
+    Args:
+        challenge_id (str): UUID of the challenge
+        supabase: Supabase client dependency
+        
+    Returns:
+        list[PostOut]: List of post objects
+        
+    Raises:
+        HTTPException: 404 if challenge not found
+        HTTPException: 500 for other errors
+    """
+    try:
+        # First, check if the challenge exists
+        challenge_resp = supabase.table("challenges").select("id").eq("id", challenge_id).single().execute()
+        if not challenge_resp.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Challenge not found")
+
+        # Fetch posts for the given challenge_id
+        posts_resp = supabase.table("posts").select("*").eq("challenge_id", challenge_id).execute()
+        
+        if posts_resp.data is None: # Handle cases where data might be None (e.g. error from Supabase)
+            return [] # Return empty list if no posts or an issue occurs but not an exception
+
+        return posts_resp.data
+    except HTTPException as http_exc: # Re-raise HTTPExceptions directly
+        raise http_exc
+    except Exception as e:
+        # Log the error for debugging if you have a logging mechanism
+        print(f"Error fetching posts for challenge {challenge_id}: {str(e)}") 
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error fetching posts for challenge: {str(e)}")
