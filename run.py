@@ -16,6 +16,7 @@ if __name__ == "__main__":
         "app": "app.main:app",  # Use import string instead of imported object
         "port": settings.PORT,
         "log_level": settings.LOG_LEVEL.lower(),
+        "reload": True,
     }
 
     if settings.ENVIRONMENT == "production":

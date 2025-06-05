@@ -123,20 +123,23 @@ async def create_post_with_media(
         await moderate_post(content, raise_exception=True)
     
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
-    media_urls = []
+    processed_media_items = []
     
+    uploaded_filenames_for_cleanup = []
+
     try:
         # Upload all media files
         if files:
-            for file in files:
-                media_url = await upload_file("post_media", file, user.id)
-                media_urls.append(media_url)
+            for file_upload_obj in files:
+                filename = await upload_file("media_urls", file_upload_obj, user.id)
+                processed_media_items.append(["media_urls", filename])
+                uploaded_filenames_for_cleanup.append(filename)
         
         # Create the post record
         post_data = {
             "user_id": user.id,
             "content": content,
-            "media_urls": media_urls if media_urls else None,
+            "media_urls": processed_media_items if processed_media_items else None,
             "location": location,
             "is_private": is_private,
             "created_at": now,
@@ -154,10 +157,11 @@ async def create_post_with_media(
         
         if not resp.data:
             # Clean up any uploaded files if post creation fails
-            for url in media_urls:
+            for fname in uploaded_filenames_for_cleanup:
                 try:
-                    delete_file("post_media", url)
-                except:
+                    delete_file("media_urls", fname)
+                except Exception as e_del:
+                    # Log cleanup error if necessary
                     pass
             raise HTTPException(status_code=400, detail="Failed to create post")
         
@@ -184,23 +188,23 @@ async def create_post_with_media(
         return post
     except HTTPException:
         # Clean up any uploaded files if exception occurs
-        for url in media_urls:
+        for fname in uploaded_filenames_for_cleanup:
             try:
-                delete_file("post_media", url)
-            except:
+                delete_file("media_urls", fname)
+            except Exception as e_del:
                 pass
         # Re-raise HTTP exceptions (including moderation failures)
         raise
     except Exception as e:
         # Clean up any uploaded files if post creation fails
-        for url in media_urls:
+        for fname in uploaded_filenames_for_cleanup:
             try:
-                delete_file("post_media", url)
-            except:
+                delete_file("media_urls", fname)
+            except Exception as e_del:
                 pass
         raise HTTPException(status_code=400, detail=f"Error creating post: {str(e)}")
 
-@router.post("/media/base64", response_model=List[str])
+@router.post("/media/base64", response_model=List[List[str]])
 async def upload_post_media_base64(
     base64_images: List[str] = Form(...),
     user=Depends(get_current_user)
@@ -213,27 +217,29 @@ async def upload_post_media_base64(
         user: Current authenticated user from token
         
     Returns:
-        List[str]: List of URLs of the uploaded media
+        List[List[str]]: List of [bucket, filename] pairs of the uploaded media
         
     Raises:
         HTTPException: 400 if upload fails
     """
-    media_urls = []
+    processed_media_items = []
+    uploaded_filenames_for_cleanup = []
     try:
         for image_data in base64_images:
-            url = await upload_base64_image("post_media", image_data, user.id)
-            media_urls.append(url)
-        return media_urls
+            filename = await upload_base64_image("media_urls", image_data, user.id)
+            processed_media_items.append(["media_urls", filename])
+            uploaded_filenames_for_cleanup.append(filename)
+        return processed_media_items
     except Exception as e:
         # Clean up any files that were uploaded before the error
-        for url in media_urls:
+        for fname in uploaded_filenames_for_cleanup:
             try:
-                delete_file("post_media", url)
-            except:
+                delete_file("media_urls", fname)
+            except Exception as e_del:
                 pass
         raise HTTPException(status_code=400, detail=f"Failed to upload media: {str(e)}")
 
-@router.post("/media", response_model=List[str])
+@router.post("/media", response_model=List[List[str]])
 async def upload_post_media(
     files: List[UploadFile] = File(...),
     user=Depends(get_current_user)
@@ -246,23 +252,25 @@ async def upload_post_media(
         user: Current authenticated user from token
         
     Returns:
-        List[str]: List of URLs of the uploaded media
+        List[List[str]]: List of [bucket, filename] pairs of the uploaded media
         
     Raises:
         HTTPException: 400 if upload fails
     """
-    media_urls = []
+    processed_media_items = []
+    uploaded_filenames_for_cleanup = []
     try:
-        for file in files:
-            url = await upload_file("post_media", file, user.id)
-            media_urls.append(url)
-        return media_urls
+        for file_upload_obj in files:
+            filename = await upload_file("media_urls", file_upload_obj, user.id)
+            processed_media_items.append(["media_urls", filename])
+            uploaded_filenames_for_cleanup.append(filename)
+        return processed_media_items
     except Exception as e:
         # Clean up any files that were uploaded before the error
-        for url in media_urls:
+        for fname in uploaded_filenames_for_cleanup:
             try:
-                delete_file("post_media", url)
-            except:
+                delete_file("media_urls", fname)
+            except Exception as e_del:
                 pass
         raise HTTPException(status_code=400, detail=f"Failed to upload media: {str(e)}")
 
@@ -358,10 +366,15 @@ async def update_post(post_id: str, payload: PostUpdate, user=Depends(get_curren
     """
     try:
         # Check if post exists and belongs to user
-        exists = supabase.table("posts").select("user_id").eq("id", post_id).single().execute()
+        existing_post_resp = supabase.table("posts").select("user_id, media_urls").eq("id", post_id).single().execute()
         
-        if exists.data["user_id"] != user.id:
-            raise HTTPException(status_code=403, detail="Not authorized to update this post")
+        if not existing_post_resp.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+
+        if existing_post_resp.data["user_id"] != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this post")
+        
+        current_media_urls = existing_post_resp.data.get("media_urls") or []
         
         # Moderate post content if it's being updated
         if payload.content is not None:
@@ -372,6 +385,25 @@ async def update_post(post_id: str, payload: PostUpdate, user=Depends(get_curren
         update_data = payload.model_dump(exclude_unset=True)
         update_data["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
         update_data["edited"] = True
+        
+        # Handle media_urls update and deletion of old files
+        if "media_urls" in update_data:
+            new_media_urls = update_data["media_urls"] # This will be List[List[str]] or None
+            
+            # Normalize new_media_urls to an empty list if None for easier comparison
+            new_media_urls_set = set(tuple(item) for item in new_media_urls) if new_media_urls else set()
+            current_media_urls_set = set(tuple(item) for item in current_media_urls)
+
+            files_to_delete = current_media_urls_set - new_media_urls_set
+            
+            for item_to_delete in files_to_delete:
+                if isinstance(item_to_delete, tuple) and len(item_to_delete) == 2:
+                    try:
+                        # item_to_delete is (bucket, filename)
+                        delete_file(bucket_name=item_to_delete[0], file_path=item_to_delete[1])
+                    except Exception as e_del:
+                        # Log error if needed, but continue
+                        print(f"Failed to delete old media {item_to_delete}: {e_del}")
         
         supabase.table("posts").update(update_data).eq("id", post_id).execute()
         
@@ -431,12 +463,14 @@ async def delete_post(post_id: str, user=Depends(get_current_user), supabase=Dep
         
         # Delete associated media files if any
         if post.data.get("media_urls") and isinstance(post.data["media_urls"], list):
-            for media_url in post.data["media_urls"]:
-                try:
-                    delete_file("post_media", media_url)
-                except Exception as e:
-                    # Log the error but continue with deletion
-                    print(f"Failed to delete media file {media_url}: {str(e)}")
+            for media_item in post.data["media_urls"]: # Renamed for clarity
+                if isinstance(media_item, list) and len(media_item) == 2:
+                    try:
+                        # media_item is [bucket_name, filename]
+                        delete_file(bucket_name=media_item[0], file_path=media_item[1])
+                    except Exception as e:
+                        # Log the error but continue with deletion
+                        print(f"Failed to delete media file {media_item}: {str(e)}")
         
         # Delete associated endorsement selfies if any
         endorsements = supabase.table("post_endorsements").select("*").eq("post_id", post_id).execute()

@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -38,7 +38,7 @@ class EndorsementUpdate(BaseModel):
     Used when a user endorses or declines the post.
     """
     status: EndorsementStatus = Field(..., description="New status of the endorsement")
-    selfie_url: Optional[str] = Field(None, description="URL of the endorsement selfie image")
+    selfie_url: Optional[List[str]] = Field(None, description="[bucket, filename] of the endorsement selfie image")
 
 
 class EndorsementOut(BaseModel):
@@ -49,7 +49,15 @@ class EndorsementOut(BaseModel):
     post_id: str
     endorser_id: str
     status: EndorsementStatus
-    selfie_url: Optional[str] = None
+    selfie_url: Optional[List[str]] = None
     created_at: datetime
     endorsed_at: Optional[datetime] = None
-    model_config = ConfigDict(from_attributes=True) 
+    model_config = ConfigDict(from_attributes=True)
+
+    @property
+    def full_selfie_url(self) -> Optional[str]:
+        if self.selfie_url and isinstance(self.selfie_url, list) and len(self.selfie_url) == 2:
+            bucket_name, file_name = self.selfie_url
+            # Bucket name for selfie_url is "selfie_url"
+            return f"https://vnxbcytjkzpmcdjkmkba.supabase.co/storage/v1/object/public/{bucket_name}/{file_name}"
+        return None 

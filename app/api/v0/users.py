@@ -107,19 +107,21 @@ async def upload_avatar(
         UserOut: Updated user profile with new avatar URL
     """
     # Check if user has an existing avatar to delete
-    if user.avatar_url:
+    if user.avatar_url and isinstance(user.avatar_url, list) and len(user.avatar_url) == 2:
         try:
-            delete_file("avatars", user.avatar_url)
+            # user.avatar_url is [bucket, filename], bucket should be "avatar_url"
+            delete_file(bucket_name=user.avatar_url[0], file_path=user.avatar_url[1])
         except Exception as e:
             logger.warning(f"Failed to delete old avatar for user {user.id}: {str(e)}")
     
-    # Upload the new avatar
-    avatar_url = await upload_file("avatars", file, user.id)
+    # Upload the new avatar to "avatar_url" bucket
+    uploaded_filename = await upload_file("avatar_url", file, user.id)
     
     # Update the user's avatar_url in the database
     updated_at = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
+    new_avatar_data = ["avatar_url", uploaded_filename]
     supabase.table("users").update({
-        "avatar_url": avatar_url,
+        "avatar_url": new_avatar_data,
         "updated_at": updated_at
     }).eq("id", user.id).execute()
     
@@ -145,19 +147,20 @@ async def upload_avatar_base64(
         UserOut: Updated user profile with new avatar URL
     """
     # Check if user has an existing avatar to delete
-    if user.avatar_url:
+    if user.avatar_url and isinstance(user.avatar_url, list) and len(user.avatar_url) == 2:
         try:
-            delete_file("avatars", user.avatar_url)
+            delete_file(bucket_name=user.avatar_url[0], file_path=user.avatar_url[1])
         except Exception as e:
             logger.warning(f"Failed to delete old avatar for user {user.id}: {str(e)}")
     
-    # Upload the new avatar
-    avatar_url = await upload_base64_image("avatars", base64_image, user.id)
+    # Upload the new avatar to "avatar_url" bucket
+    uploaded_filename = await upload_base64_image("avatar_url", base64_image, user.id)
     
     # Update the user's avatar_url in the database
     updated_at = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
+    new_avatar_data = ["avatar_url", uploaded_filename]
     supabase.table("users").update({
-        "avatar_url": avatar_url,
+        "avatar_url": new_avatar_data,
         "updated_at": updated_at
     }).eq("id", user.id).execute()
     
@@ -199,15 +202,17 @@ async def delete_user(user_id: str, current_user=Depends(get_current_user)):
             )
             
         # Check if user exists in public.users table
-        user = supabase.table("users").select("id,avatar_url").eq("id", user_id).single().execute()
+        user_db_data = supabase.table("users").select("id,avatar_url").eq("id", user_id).single().execute()
         
-        if not user.data:
+        if not user_db_data.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
         
         # Delete avatar if it exists
-        if user.data.get("avatar_url"):
+        db_avatar_url = user_db_data.data.get("avatar_url")
+        if db_avatar_url and isinstance(db_avatar_url, list) and len(db_avatar_url) == 2:
             try:
-                delete_file("avatars", user.data["avatar_url"])
+                # db_avatar_url is [bucket, filename]
+                delete_file(bucket_name=db_avatar_url[0], file_path=db_avatar_url[1])
             except Exception as e:
                 logger.warning(f"Failed to delete avatar for user {user_id}: {str(e)}")
 

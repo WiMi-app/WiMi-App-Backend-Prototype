@@ -13,7 +13,7 @@ CREATE TABLE public.users (
     username VARCHAR(255) UNIQUE NOT NULL,
     full_name VARCHAR(255) NOT NULL,
     bio TEXT,
-    avatar_url TEXT,
+    avatar_url TEXT[],
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
@@ -116,6 +116,7 @@ CREATE TABLE public.challenges (
     repetition_frequency INTEGER,
     repetition_days INTEGER[],
     check_in_time TIME,
+    background_photo TEXT[],
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     is_private BOOLEAN DEFAULT FALSE,
@@ -174,7 +175,7 @@ CREATE TABLE public.post_endorsements (
     post_id UUID NOT NULL REFERENCES public.posts(id) ON DELETE CASCADE,
     endorser_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     status endorsement_status DEFAULT 'pending',
-    selfie_url TEXT,
+    selfie_url TEXT[],
     created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
     endorsed_at TIMESTAMP WITH TIME ZONE,
     CONSTRAINT unique_post_endorser UNIQUE (post_id, endorser_id)

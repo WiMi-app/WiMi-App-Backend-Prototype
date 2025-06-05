@@ -58,8 +58,8 @@ class ChallengeBase(BaseModel):
     time_window: Optional[int] = Field(
         None, description="Time window for challenge completion in minutes"
     )
-    background_photo: Optional[str] = Field(
-        None, description="Background photo for the challenge"
+    background_photo: Optional[List[str]] = Field(
+        None, description="[bucket, filename] for the challenge background photo"
     )
 
 class ChallengeCreate(ChallengeBase):
@@ -86,7 +86,7 @@ class ChallengeUpdate(BaseModel):
     check_in_time: Optional[time] = Field(None)
     is_private: Optional[bool] = Field(None)
     time_window: Optional[int] = Field(None)
-    background_photo: Optional[str] = Field(None)
+    background_photo: Optional[List[str]] = Field(None, description="[bucket, filename] for the challenge background photo")
     
 
 class ChallengeOut(ChallengeBase):
@@ -99,6 +99,14 @@ class ChallengeOut(ChallengeBase):
     created_at: str
     updated_at: str
     model_config = ConfigDict(from_attributes=True)
+
+    @property
+    def full_background_photo_url(self) -> Optional[str]:
+        if self.background_photo and isinstance(self.background_photo, list) and len(self.background_photo) == 2:
+            bucket_name, file_name = self.background_photo
+            # Bucket name for background_photo is "background_photo"
+            return f"https://vnxbcytjkzpmcdjkmkba.supabase.co/storage/v1/object/public/{bucket_name}/{file_name}"
+        return None
 
 
 class ChallengeParticipantOut(BaseModel):

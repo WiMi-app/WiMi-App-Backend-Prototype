@@ -3,11 +3,13 @@ Challenges API endpoints for managing challenge resources.
 Provides CRUD operations for challenges with authorization controls.
 """
 from datetime import datetime
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.core.config import supabase
 from app.core.deps import get_current_user
+from app.core.media import delete_file, upload_file
 from app.core.moderation import moderate_challenge
 from app.schemas.challenges import (ChallengeCreate, ChallengeOut,
                                     ChallengeParticipantOut, ChallengeUpdate,
@@ -41,6 +43,10 @@ async def create_challenge(payload: ChallengeCreate, user=Depends(get_current_us
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
         record.update({"creator_id": user.id, "created_at": now, "updated_at": now})
         
+        # Ensure background_photo is correctly handled if provided in payload
+        # The payload.background_photo should already be List[str] or None from Pydantic model
+        # No specific file upload logic here, assumes payload.background_photo is already in the desired format ["bucket", "filename"] or None
+
         # Convert time to string if present
         if "check_in_time" in record and record["check_in_time"] is not None:
             record["check_in_time"] = record["check_in_time"].strftime("%H:%M:%S")
@@ -112,20 +118,38 @@ async def update_challenge(challenge_id: str, payload: ChallengeUpdate, user=Dep
     """
     try:
         # Check if challenge exists and belongs to user
-        exists = supabase.table("challenges").select("creator_id").eq("id", challenge_id).single().execute()
+        existing_challenge_resp = supabase.table("challenges").select("creator_id, background_photo").eq("id", challenge_id).single().execute()
         
-        if exists.data["creator_id"] != user.id:
-            raise HTTPException(status_code=403, detail="Not authorized to update this challenge")
+        if not existing_challenge_resp.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Challenge not found")
+
+        if existing_challenge_resp.data["creator_id"] != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this challenge")
         
+        current_background_photo = existing_challenge_resp.data.get("background_photo")
+
         # Moderate challenge description if provided
         if payload.description:
             # This will raise an exception if moderation fails
             await moderate_challenge(payload.description, raise_exception=True)
             
-        # Update the challenge
         update_data = payload.model_dump(exclude_unset=True)
         update_data["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
-            
+
+        # Handle background_photo update
+        if "background_photo" in update_data:
+            new_background_photo = update_data["background_photo"] # This is List[str] or None
+
+            if current_background_photo and isinstance(current_background_photo, list) and len(current_background_photo) == 2:
+                # If new photo is different or None, delete old one
+                if new_background_photo != current_background_photo:
+                    try:
+                        delete_file(bucket_name=current_background_photo[0], file_path=current_background_photo[1])
+                    except Exception as e_del:
+                        print(f"Failed to delete old background photo {current_background_photo}: {e_del}")
+            # If new_background_photo is None, it will be set as such in update_data (or field removed by exclude_unset if that's the model behavior)
+            # If it's a new [bucket, file] array, it will be set.
+        
         # Convert time to string if present
         if "check_in_time" in update_data and update_data["check_in_time"] is not None:
             update_data["check_in_time"] = update_data["check_in_time"].strftime("%H:%M:%S")
@@ -159,13 +183,23 @@ async def delete_challenge(challenge_id: str, user=Depends(get_current_user)):
     """
     try:
         # Check if challenge exists and belongs to user
-        exists = supabase.table("challenges").select("creator_id").eq("id", challenge_id).single().execute()
+        challenge_to_delete_resp = supabase.table("challenges").select("creator_id, background_photo").eq("id", challenge_id).single().execute()
+        
+        if not challenge_to_delete_resp.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Challenge not found")
             
-        if exists.data["creator_id"] != user.id:
-            raise HTTPException(status_code=403, detail="Not authorized to delete this challenge")
-            
-        # Delete the challenge
-        supabase.storage.from_("challenges").delete(f"{challenge_id}/background_photo")
+        if challenge_to_delete_resp.data["creator_id"] != user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this challenge")
+        
+        # Delete background photo if it exists
+        background_photo_to_delete = challenge_to_delete_resp.data.get("background_photo")
+        if background_photo_to_delete and isinstance(background_photo_to_delete, list) and len(background_photo_to_delete) == 2:
+            try:
+                delete_file(bucket_name=background_photo_to_delete[0], file_path=background_photo_to_delete[1])
+            except Exception as e_del:
+                print(f"Failed to delete background photo {background_photo_to_delete} for challenge {challenge_id}: {e_del}")
+        
+        # Delete the challenge record
         supabase.table("challenges").delete().eq("id", challenge_id).execute()
         return None
     except Exception as e:
@@ -398,3 +432,57 @@ async def get_my_created_challenges(user=Depends(get_current_user)):
         return resp.data
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error fetching challenges: {str(e)}")
+
+# New endpoint for uploading challenge background photo
+@router.post("/{challenge_id}/background-photo", response_model=ChallengeOut)
+async def upload_challenge_background_photo(
+    challenge_id: str,
+    file: UploadFile = File(...),
+    user=Depends(get_current_user)
+):
+    """
+    Upload or update the background photo for a challenge.
+    The user must be the creator of the challenge.
+    """
+    # Check if challenge exists and belongs to user
+    challenge_resp = supabase.table("challenges") \
+        .select("creator_id, background_photo") \
+        .eq("id", challenge_id) \
+        .single() \
+        .execute()
+
+    if not challenge_resp.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Challenge not found")
+
+    if challenge_resp.data["creator_id"] != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this challenge's photo")
+
+    # Delete old background photo if it exists
+    old_background_photo = challenge_resp.data.get("background_photo")
+    if old_background_photo and isinstance(old_background_photo, list) and len(old_background_photo) == 2:
+        try:
+            delete_file(bucket_name=old_background_photo[0], file_path=old_background_photo[1])
+        except Exception as e:
+            print(f"Failed to delete old background photo {old_background_photo}: {str(e)}") # Log error
+
+    # Upload new background photo to "background_photo" bucket
+    # Using challenge_id in filename to ensure uniqueness or specific pathing if desired, though upload_file handles unique names
+    uploaded_filename = await upload_file("background_photo", file, f"challenge_{challenge_id}_{user.id}")
+    new_photo_data = ["background_photo", uploaded_filename]
+
+    # Update the challenge's background_photo in the database
+    updated_at = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
+    supabase.table("challenges") \
+        .update({
+            "background_photo": new_photo_data,
+            "updated_at": updated_at
+        }) \
+        .eq("id", challenge_id) \
+        .execute()
+
+    # Return the updated challenge data
+    return supabase.table("challenges") \
+        .select("*") \
+        .eq("id", challenge_id) \
+        .single() \
+        .execute().data
