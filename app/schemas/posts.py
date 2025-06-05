@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.config import settings
+
 
 class PostBase(BaseModel):
     """
@@ -118,7 +120,7 @@ class PostOut(BaseModel):
                 if file_name.startswith('"') and file_name.endswith('"'):
                     file_name = file_name[1:-1].replace('\\"' ,'"')
 
-                processed_urls.append(f"https://vnxbcytjkzpmcdjkmkba.supabase.co/storage/v1/object/public/{bucket_name}/{file_name}")
+                processed_urls.append(f"{settings.SUPABASE_URL}/storage/v1/object/public/{bucket_name}//{file_name}")
             else:
                 print(f"Could not parse media_url item '{item_str}' into two parts. Parsed: {parts}")
                 

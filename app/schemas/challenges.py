@@ -4,6 +4,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.config import settings
+
 
 class RepetitionType(str, Enum):
     """Enum for challenge repetition types"""
@@ -105,7 +107,7 @@ class ChallengeOut(ChallengeBase):
         if self.background_photo and isinstance(self.background_photo, list) and len(self.background_photo) == 2:
             bucket_name, file_name = self.background_photo
             # Bucket name for background_photo is "background_photo"
-            return f"https://vnxbcytjkzpmcdjkmkba.supabase.co/storage/v1/object/public/{bucket_name}/{file_name}"
+            return f"{settings.SUPABASE_URL}/storage/v1/object/public/{bucket_name}//{file_name}"
         return None
 
 

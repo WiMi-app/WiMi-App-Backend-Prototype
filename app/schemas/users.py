@@ -3,6 +3,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.core.config import settings
+
 
 class UserBase(BaseModel):
     """
@@ -28,15 +30,9 @@ class UserOut(UserBase):
     @property
     def full_avatar_url(self) -> Optional[str]:
         if self.avatar_url and len(self.avatar_url) == 2:
-            # Assuming the stored format is [bucket, filename]
-            # and the bucket name for avatar_url is "avatar_url" as per user's instruction.
-            # For robustness, we could check self.avatar_url[0] == "avatar_url"
-            # or dynamically use self.avatar_url[0] as the bucket.
-            # The user specified "bucket name is same as the column name",
-            # so self.avatar_url[0] should be "avatar_url".
             bucket_name = self.avatar_url[0]
             file_name = self.avatar_url[1]
-            return f"https://vnxbcytjkzpmcdjkmkba.supabase.co/storage/v1/object/public/{bucket_name}/{file_name}"
+            return f"{settings.SUPABASE_URL}/storage/v1/object/public/{bucket_name}//{file_name}"
         return None
 
 class UserUpdate(BaseModel):
