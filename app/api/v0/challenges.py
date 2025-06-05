@@ -46,7 +46,6 @@ async def create_challenge(payload: ChallengeCreate, user=Depends(get_current_us
         
         # Ensure background_photo is correctly handled if provided in payload
         # The payload.background_photo should already be List[str] or None from Pydantic model
-        # No specific file upload logic here, assumes payload.background_photo is already in the desired format ["bucket", "filename"] or None
 
         # Convert time to string if present
         if "check_in_time" in record and record["check_in_time"] is not None:
@@ -148,8 +147,6 @@ async def update_challenge(challenge_id: str, payload: ChallengeUpdate, user=Dep
                         delete_file(bucket_name=current_background_photo[0], file_path=current_background_photo[1])
                     except Exception as e_del:
                         print(f"Failed to delete old background photo {current_background_photo}: {e_del}")
-            # If new_background_photo is None, it will be set as such in update_data (or field removed by exclude_unset if that's the model behavior)
-            # If it's a new [bucket, file] array, it will be set.
         
         # Convert time to string if present
         if "check_in_time" in update_data and update_data["check_in_time"] is not None:
@@ -505,7 +502,6 @@ async def list_posts_for_challenge(challenge_id: str, supabase=Depends(get_supab
         HTTPException: 500 for other errors
     """
     try:
-        # First, check if the challenge exists
         challenge_resp = supabase.table("challenges").select("id").eq("id", challenge_id).single().execute()
         if not challenge_resp.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Challenge not found")
