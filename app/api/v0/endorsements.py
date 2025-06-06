@@ -256,11 +256,10 @@ async def update_endorsement(
             )
 
         if status == EndorsementStatus.ENDORSED and not selfie:
-             # If endorsing, selfie is typically required from client.
-             # Depending on strictness, could raise error or proceed if selfie already exists.
-             # For now, let's assume client ensures selfie if status is ENDORSED and it's a new endorsement.
-             # If selfie is None here, but one exists, we keep it unless status is DECLINED.
-            pass # Or raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selfie is required to endorse.")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Selfie is required to endorse."
+            )
 
         update_data = {"status": status.value}
         new_selfie_data_to_store = existing_endorsement.get("selfie_url") # Default to existing
@@ -294,12 +293,7 @@ async def update_endorsement(
             .update(update_data)\
             .eq("id", endorsement_id)\
             .execute()
-
-        # ... (rest of the logic for notifications, updating post.is_endorsed, etc.)
-        # This part of logic for checking if all endorsements are done and updating post.is_endorsed
-        # should be re-evaluated or confirmed it's handled correctly elsewhere or after this.
-        # For now, focusing on the selfie_url and status update of the endorsement itself.
-
+       
         # Fetch the fully updated endorsement to return
         final_endorsement = supabase.table("post_endorsements")\
             .select("*")\

@@ -35,19 +35,13 @@ async def create_challenge(payload: ChallengeCreate, user=Depends(get_current_us
         HTTPException: 403 if content violates moderation policy
     """
     try:
-        # Moderate challenge description if provided
         if payload.description:
-            # This will raise an exception if moderation fails
             await moderate_challenge(payload.description, raise_exception=True)
         
         record = payload.model_dump()
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
         record.update({"creator_id": user.id, "created_at": now, "updated_at": now})
         
-        # Ensure background_photo is correctly handled if provided in payload
-        # The payload.background_photo should already be List[str] or None from Pydantic model
-
-        # Convert time to string if present
         if "check_in_time" in record and record["check_in_time"] is not None:
             record["check_in_time"] = record["check_in_time"].strftime("%H:%M:%S")
         if "due_date" in record and record["due_date"] is not None:
@@ -60,7 +54,6 @@ async def create_challenge(payload: ChallengeCreate, user=Depends(get_current_us
         
         return resp.data[0]
     except HTTPException:
-        # Re-raise HTTP exceptions (including moderation failures)
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error creating challenge: {str(e)}")
@@ -117,7 +110,6 @@ async def update_challenge(challenge_id: str, payload: ChallengeUpdate, user=Dep
         HTTPException: 404 if challenge not found
     """
     try:
-        # Check if challenge exists and belongs to user
         existing_challenge_resp = supabase.table("challenges").select("creator_id, background_photo").eq("id", challenge_id).single().execute()
         
         if not existing_challenge_resp.data:
@@ -128,37 +120,30 @@ async def update_challenge(challenge_id: str, payload: ChallengeUpdate, user=Dep
         
         current_background_photo = existing_challenge_resp.data.get("background_photo")
 
-        # Moderate challenge description if provided
         if payload.description:
-            # This will raise an exception if moderation fails
             await moderate_challenge(payload.description, raise_exception=True)
             
         update_data = payload.model_dump(exclude_unset=True)
         update_data["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
 
-        # Handle background_photo update
         if "background_photo" in update_data:
             new_background_photo = update_data["background_photo"] # This is List[str] or None
 
             if current_background_photo and isinstance(current_background_photo, list) and len(current_background_photo) == 2:
-                # If new photo is different or None, delete old one
                 if new_background_photo != current_background_photo:
                     try:
                         delete_file(bucket_name=current_background_photo[0], file_path=current_background_photo[1])
                     except Exception as e_del:
                         print(f"Failed to delete old background photo {current_background_photo}: {e_del}")
         
-        # Convert time to string if present
         if "check_in_time" in update_data and update_data["check_in_time"] is not None:
             update_data["check_in_time"] = update_data["check_in_time"].strftime("%H:%M:%S")
         
         supabase.table("challenges").update(update_data).eq("id", challenge_id).execute()
         
-        # Return updated challenge
         updated = supabase.table("challenges").select("*").eq("id", challenge_id).single().execute()
         return updated.data
     except HTTPException:
-        # Re-raise HTTP exceptions (including moderation failures)
         raise
     except Exception as e:
         raise HTTPException(status_code=404, detail="Challenge not found")
@@ -180,7 +165,6 @@ async def delete_challenge(challenge_id: str, user=Depends(get_current_user)):
         HTTPException: 404 if challenge not found
     """
     try:
-        # Check if challenge exists and belongs to user
         challenge_to_delete_resp = supabase.table("challenges").select("creator_id, background_photo").eq("id", challenge_id).single().execute()
         
         if not challenge_to_delete_resp.data:
@@ -189,7 +173,6 @@ async def delete_challenge(challenge_id: str, user=Depends(get_current_user)):
         if challenge_to_delete_resp.data["creator_id"] != user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this challenge")
         
-        # Delete background photo if it exists
         background_photo_to_delete = challenge_to_delete_resp.data.get("background_photo")
         if background_photo_to_delete and isinstance(background_photo_to_delete, list) and len(background_photo_to_delete) == 2:
             try:
@@ -197,7 +180,6 @@ async def delete_challenge(challenge_id: str, user=Depends(get_current_user)):
             except Exception as e_del:
                 print(f"Failed to delete background photo {background_photo_to_delete} for challenge {challenge_id}: {e_del}")
         
-        # Delete the challenge record
         supabase.table("challenges").delete().eq("id", challenge_id).execute()
         return None
     except Exception as e:
@@ -222,12 +204,10 @@ async def join_challenge(challenge_id: str, user=Depends(get_current_user)):
         HTTPException: 400 if user is already a participant
     """
     try:
-        # Check if challenge exists
         challenge = supabase.table("challenges").select("id").eq("id", challenge_id).single().execute()
         if not challenge.data:
             raise HTTPException(status_code=404, detail="Challenge not found")
         
-        # Check if user is already a participant
         existing = supabase.table("challenge_participants") \
             .select("*") \
             .eq("challenge_id", challenge_id) \
@@ -237,7 +217,6 @@ async def join_challenge(challenge_id: str, user=Depends(get_current_user)):
         if existing.data:
             raise HTTPException(status_code=400, detail="Already joined this challenge")
         
-        # Join the challenge
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
         participant_data = {
             "challenge_id": challenge_id,
@@ -273,7 +252,6 @@ async def leave_challenge(challenge_id: str, user=Depends(get_current_user)):
         HTTPException: 404 if challenge not found or user is not a participant
     """
     try:
-        # Check if user is a participant
         existing = supabase.table("challenge_participants") \
             .select("*") \
             .eq("challenge_id", challenge_id) \
@@ -283,7 +261,6 @@ async def leave_challenge(challenge_id: str, user=Depends(get_current_user)):
         if not existing.data:
             raise HTTPException(status_code=404, detail="Not a participant in this challenge")
         
-        # Leave the challenge
         supabase.table("challenge_participants") \
             .delete() \
             .eq("challenge_id", challenge_id) \
@@ -311,12 +288,10 @@ async def list_challenge_participants(challenge_id: str):
         HTTPException: 404 if challenge not found
     """
     try:
-        # Check if challenge exists
         challenge = supabase.table("challenges").select("id").eq("id", challenge_id).single().execute()
         if not challenge.data:
             raise HTTPException(status_code=404, detail="Challenge not found")
         
-        # Get participants
         resp = supabase.table("challenge_participants") \
             .select("*") \
             .eq("challenge_id", challenge_id) \
@@ -349,7 +324,6 @@ async def update_participation_status(
         HTTPException: 404 if challenge not found or user is not a participant
     """
     try:
-        # Check if user is a participant
         existing = supabase.table("challenge_participants") \
             .select("*") \
             .eq("challenge_id", challenge_id) \
@@ -359,7 +333,6 @@ async def update_participation_status(
         if not existing.data:
             raise HTTPException(status_code=404, detail="Not a participant in this challenge")
         
-        # Update status
         update_data = {"status": status}
         resp = supabase.table("challenge_participants") \
             .update(update_data) \
@@ -388,7 +361,6 @@ async def get_my_participating_challenges(user=Depends(get_current_user)):
         list[ChallengeOut]: List of challenges the user is participating in
     """
     try:
-        # Get all challenge IDs the user is participating in
         participants = supabase.table("challenge_participants") \
             .select("challenge_id") \
             .eq("user_id", user.id) \
@@ -397,10 +369,8 @@ async def get_my_participating_challenges(user=Depends(get_current_user)):
         if not participants.data:
             return []
             
-        # Get challenge IDs
         challenge_ids = [p["challenge_id"] for p in participants.data]
         
-        # Get challenge details
         resp = supabase.table("challenges") \
             .select("*") \
             .in_("id", challenge_ids) \
@@ -431,7 +401,6 @@ async def get_my_created_challenges(user=Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error fetching challenges: {str(e)}")
 
-# New endpoint for uploading challenge background photo
 @router.post("/{challenge_id}/background-photo", response_model=ChallengeOut)
 async def upload_challenge_background_photo(
     challenge_id: str,
@@ -442,7 +411,6 @@ async def upload_challenge_background_photo(
     Upload or update the background photo for a challenge.
     The user must be the creator of the challenge.
     """
-    # Check if challenge exists and belongs to user
     challenge_resp = supabase.table("challenges") \
         .select("creator_id, background_photo") \
         .eq("id", challenge_id) \
@@ -455,20 +423,16 @@ async def upload_challenge_background_photo(
     if challenge_resp.data["creator_id"] != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this challenge's photo")
 
-    # Delete old background photo if it exists
     old_background_photo = challenge_resp.data.get("background_photo")
     if old_background_photo and isinstance(old_background_photo, list) and len(old_background_photo) == 2:
         try:
             delete_file(bucket_name=old_background_photo[0], file_path=old_background_photo[1])
         except Exception as e:
-            print(f"Failed to delete old background photo {old_background_photo}: {str(e)}") # Log error
+            print(f"Failed to delete old background photo {old_background_photo}: {str(e)}")
 
-    # Upload new background photo to "background_photo" bucket
-    # Using challenge_id in filename to ensure uniqueness or specific pathing if desired, though upload_file handles unique names
     uploaded_filename = await upload_file("background_photo", file, f"challenge_{challenge_id}_{user.id}")
     new_photo_data = ["background_photo", uploaded_filename]
 
-    # Update the challenge's background_photo in the database
     updated_at = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
     supabase.table("challenges") \
         .update({
@@ -478,7 +442,6 @@ async def upload_challenge_background_photo(
         .eq("id", challenge_id) \
         .execute()
 
-    # Return the updated challenge data
     return supabase.table("challenges") \
         .select("*") \
         .eq("id", challenge_id) \
@@ -506,16 +469,38 @@ async def list_posts_for_challenge(challenge_id: str, supabase=Depends(get_supab
         if not challenge_resp.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Challenge not found")
 
-        # Fetch posts for the given challenge_id
         posts_resp = supabase.table("posts").select("*").eq("challenge_id", challenge_id).execute()
         
-        if posts_resp.data is None: # Handle cases where data might be None (e.g. error from Supabase)
-            return [] # Return empty list if no posts or an issue occurs but not an exception
+        if posts_resp.data is None:
+            return []
 
         return posts_resp.data
-    except HTTPException as http_exc: # Re-raise HTTPExceptions directly
+    except HTTPException as http_exc:
         raise http_exc
     except Exception as e:
-        # Log the error for debugging if you have a logging mechanism
         print(f"Error fetching posts for challenge {challenge_id}: {str(e)}") 
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error fetching posts for challenge: {str(e)}")
+
+@router.get("/{challenge_id}/ranking/{metric}", response_model=list[ChallengeParticipantOut])
+async def get_challenge_ranking(challenge_id: str, metric: str, supabase=Depends(get_supabase)):
+    valid_metrics = ["points", "check_ins", "streak"]
+
+    if metric not in valid_metrics:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ranking metric.")
+
+    try:
+        challenge = supabase.table("challenges").select("id").eq("id", challenge_id).single().execute()
+        if not challenge.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Challenge not found")
+        
+        resp = supabase.table("challenge_participants") \
+            .select("*") \
+            .eq("challenge_id", challenge_id) \
+            .order(metric, desc=True) \
+            .execute()
+            
+        return resp.data
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error fetching challenge ranking: {str(e)}")

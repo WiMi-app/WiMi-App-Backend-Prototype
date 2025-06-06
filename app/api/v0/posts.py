@@ -1,17 +1,69 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import (APIRouter, Depends, File, Form, HTTPException, UploadFile,
                      status)
 
-from app.core.config import supabase
 from app.core.deps import get_current_user, get_supabase
 from app.core.media import delete_file, upload_base64_image, upload_file
 from app.core.moderation import moderate_post
-from app.schemas.posts import (PostCreate, PostEndorsementInfo, PostOut,
-                               PostUpdate)
+from app.schemas.posts import PostCreate, PostOut, PostUpdate
 
 router = APIRouter(tags=["posts"])
+
+async def update_challenge_achievements(user_id: str, challenge_id: str, supabase_client):
+    """
+    Update challenge achievement stats for a user.
+    """
+    try:
+        participant_resp = supabase_client.table("challenge_participants").select("*").eq("user_id", user_id).eq("challenge_id", challenge_id).single().execute()
+        
+        if not participant_resp.data:
+            return
+
+        participant = participant_resp.data
+        
+        new_count = participant.get("count", 0) + 1
+        
+        # Fetch the last two posts to check for consecutive days
+        posts_resp = supabase_client.table("posts") \
+            .select("created_at") \
+            .eq("user_id", user_id) \
+            .eq("challenge_id", challenge_id) \
+            .order("created_at", desc=True) \
+            .limit(2) \
+            .execute()
+        
+        new_streaks = participant.get("streaks", 0)
+
+        if posts_resp.data and len(posts_resp.data) > 1:
+            latest_post_date = datetime.fromisoformat(posts_resp.data[0]['created_at']).date()
+            previous_post_date = datetime.fromisoformat(posts_resp.data[1]['created_at']).date()
+            
+            if (latest_post_date - previous_post_date).days == 1:
+                # Consecutive days, increment streak
+                new_streaks += 1
+            elif (latest_post_date - previous_post_date).days > 1:
+                # Not consecutive, reset streak to 1
+                new_streaks = 1
+            # If days are 0, it means another post on the same day, so streak does not change.
+        else:
+            # This is the first post for the challenge
+            new_streaks = 1
+
+        joined_date = datetime.fromisoformat(participant["joined_at"]).date()
+        days_in_challenge = (datetime.now().date() - joined_date).days + 1
+        new_success_rate = (new_count / days_in_challenge) if days_in_challenge > 0 else new_count
+
+        update_data = {
+            "counts": new_count,
+            "streaks": new_streaks,
+            "success_rate": new_success_rate
+        }
+        supabase_client.table("challenge_participants").update(update_data).eq("user_id", user_id).eq("challenge_id", challenge_id).execute()
+
+    except Exception as e:
+        print(f"Failed to update challenge achievements for user {user_id}, challenge {challenge_id}: {e}")
 
 @router.post("/", response_model=PostOut, status_code=status.HTTP_201_CREATED)
 async def create_post(payload: PostCreate, user=Depends(get_current_user), supabase=Depends(get_supabase)):
@@ -29,14 +81,11 @@ async def create_post(payload: PostCreate, user=Depends(get_current_user), supab
         HTTPException: 400 if creation fails
         HTTPException: 403 if content violates moderation policy
     """
-    # Moderate post content
     if payload.content:
-        # This will raise an exception if content violates guidelines
         await moderate_post(payload.content, raise_exception=True)
         
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
     
-    # Create the post record
     post_data = {
         "user_id": user.id,
                     "content": payload.content,
@@ -49,12 +98,10 @@ async def create_post(payload: PostCreate, user=Depends(get_current_user), supab
         "is_endorsed": False
     }
     
-    # Only add challenge_id if it's a valid value and not None or empty string
     if hasattr(payload, "challenge_id") and payload.challenge_id and payload.challenge_id != "string":
         post_data["challenge_id"] = payload.challenge_id
     
     try:
-        # Insert post
         resp = supabase.table("posts").insert(post_data).execute()
         
         if not resp.data:
@@ -62,7 +109,9 @@ async def create_post(payload: PostCreate, user=Depends(get_current_user), supab
         
         post = resp.data[0]
         
-        # If there are categories, add them to post_categories table
+        if post.get("challenge_id"):
+            await update_challenge_achievements(user.id, post["challenge_id"], supabase)
+        
         if hasattr(payload, "categories") and payload.categories:
             for category in payload.categories:
                 category_data = {
@@ -72,7 +121,6 @@ async def create_post(payload: PostCreate, user=Depends(get_current_user), supab
                 }
                 supabase.table("post_categories").insert(category_data).execute()
         
-        # Add empty endorsement info
         post["endorsement_info"] = {
             "is_endorsed": False,
             "endorsement_count": 0,
@@ -82,7 +130,6 @@ async def create_post(payload: PostCreate, user=Depends(get_current_user), supab
         
         return post
     except HTTPException:
-        # Re-raise HTTP exceptions (including moderation failures)
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error creating post: {str(e)}")
@@ -117,9 +164,7 @@ async def create_post_with_media(
         HTTPException: 400 if creation fails
         HTTPException: 403 if content violates moderation policy
     """
-    # Moderate post content
     if content:
-        # This will raise an exception if content violates guidelines
         await moderate_post(content, raise_exception=True)
     
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
@@ -128,14 +173,12 @@ async def create_post_with_media(
     uploaded_filenames_for_cleanup = []
 
     try:
-        # Upload all media files
         if files:
             for file_upload_obj in files:
                 filename = await upload_file("media_urls", file_upload_obj, user.id)
                 processed_media_items.append(["media_urls", filename])
                 uploaded_filenames_for_cleanup.append(filename)
         
-        # Create the post record
         post_data = {
             "user_id": user.id,
             "content": content,
@@ -148,26 +191,24 @@ async def create_post_with_media(
             "is_endorsed": False
         }
         
-        # Only add challenge_id if it's valid
         if challenge_id and challenge_id != "string" and challenge_id.strip():
             post_data["challenge_id"] = challenge_id
         
-        # Insert post
         resp = supabase.table("posts").insert(post_data).execute()
         
         if not resp.data:
-            # Clean up any uploaded files if post creation fails
             for fname in uploaded_filenames_for_cleanup:
                 try:
                     delete_file("media_urls", fname)
                 except Exception as e_del:
-                    # Log cleanup error if necessary
                     pass
             raise HTTPException(status_code=400, detail="Failed to create post")
         
         post = resp.data[0]
         
-        # If there are categories, add them
+        if post.get("challenge_id"):
+            await update_challenge_achievements(user.id, post["challenge_id"], supabase)
+        
         if categories:
             for category in categories:
                 category_data = {
@@ -177,7 +218,6 @@ async def create_post_with_media(
                 }
                 supabase.table("post_categories").insert(category_data).execute()
         
-        # Add empty endorsement info
         post["endorsement_info"] = {
             "is_endorsed": False,
             "endorsement_count": 0,
@@ -187,16 +227,13 @@ async def create_post_with_media(
         
         return post
     except HTTPException:
-        # Clean up any uploaded files if exception occurs
         for fname in uploaded_filenames_for_cleanup:
             try:
                 delete_file("media_urls", fname)
             except Exception as e_del:
                 pass
-        # Re-raise HTTP exceptions (including moderation failures)
         raise
     except Exception as e:
-        # Clean up any uploaded files if post creation fails
         for fname in uploaded_filenames_for_cleanup:
             try:
                 delete_file("media_urls", fname)
@@ -231,7 +268,6 @@ async def upload_post_media_base64(
             uploaded_filenames_for_cleanup.append(filename)
         return processed_media_items
     except Exception as e:
-        # Clean up any files that were uploaded before the error
         for fname in uploaded_filenames_for_cleanup:
             try:
                 delete_file("media_urls", fname)
@@ -266,7 +302,6 @@ async def upload_post_media(
             uploaded_filenames_for_cleanup.append(filename)
         return processed_media_items
     except Exception as e:
-        # Clean up any files that were uploaded before the error
         for fname in uploaded_filenames_for_cleanup:
             try:
                 delete_file("media_urls", fname)
@@ -282,13 +317,10 @@ async def list_posts(supabase=Depends(get_supabase)):
     Returns:
         list[PostOut]: List of post objects
     """
-    # Get all posts
     resp = supabase.table("posts").select("*").execute()
     posts = resp.data
     
-    # Add endorsement info to each post
     for post in posts:
-        # Get endorsements for this post
         endorsements = supabase.table("post_endorsements")\
             .select("*")\
             .eq("post_id", post["id"])\
@@ -325,7 +357,6 @@ async def get_post(post_id: str, supabase=Depends(get_supabase)):
         resp = supabase.table("posts").select("*").eq("id", post_id).single().execute()
         post = resp.data
         
-        # Get endorsements for this post
         endorsements = supabase.table("post_endorsements")\
             .select("*")\
             .eq("post_id", post_id)\
@@ -365,7 +396,6 @@ async def update_post(post_id: str, payload: PostUpdate, user=Depends(get_curren
         HTTPException: 400 if content violates moderation policy
     """
     try:
-        # Check if post exists and belongs to user
         existing_post_resp = supabase.table("posts").select("user_id, media_urls").eq("id", post_id).single().execute()
         
         if not existing_post_resp.data:
@@ -376,21 +406,16 @@ async def update_post(post_id: str, payload: PostUpdate, user=Depends(get_curren
         
         current_media_urls = existing_post_resp.data.get("media_urls") or []
         
-        # Moderate post content if it's being updated
         if payload.content is not None:
-            # This will raise an exception if content violates guidelines
             await moderate_post(payload.content, raise_exception=True)
             
-        # Update the post
         update_data = payload.model_dump(exclude_unset=True)
         update_data["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
         update_data["edited"] = True
         
-        # Handle media_urls update and deletion of old files
         if "media_urls" in update_data:
-            new_media_urls = update_data["media_urls"] # This will be List[List[str]] or None
+            new_media_urls = update_data["media_urls"]
             
-            # Normalize new_media_urls to an empty list if None for easier comparison
             new_media_urls_set = set(tuple(item) for item in new_media_urls) if new_media_urls else set()
             current_media_urls_set = set(tuple(item) for item in current_media_urls)
 
@@ -399,19 +424,15 @@ async def update_post(post_id: str, payload: PostUpdate, user=Depends(get_curren
             for item_to_delete in files_to_delete:
                 if isinstance(item_to_delete, tuple) and len(item_to_delete) == 2:
                     try:
-                        # item_to_delete is (bucket, filename)
                         delete_file(bucket_name=item_to_delete[0], file_path=item_to_delete[1])
                     except Exception as e_del:
-                        # Log error if needed, but continue
                         print(f"Failed to delete old media {item_to_delete}: {e_del}")
         
         supabase.table("posts").update(update_data).eq("id", post_id).execute()
         
-        # Return updated post with endorsement info
         updated_post = supabase.table("posts").select("*").eq("id", post_id).single().execute()
         post = updated_post.data
         
-        # Get endorsements for this post
         endorsements = supabase.table("post_endorsements")\
             .select("*")\
             .eq("post_id", post_id)\
@@ -430,7 +451,6 @@ async def update_post(post_id: str, payload: PostUpdate, user=Depends(get_curren
         
         return post
     except HTTPException:
-        # Re-raise HTTP exceptions (including moderation failures)
         raise
     except Exception as e:
         raise HTTPException(status_code=404, detail="Post not found")
@@ -452,7 +472,6 @@ async def delete_post(post_id: str, user=Depends(get_current_user), supabase=Dep
         HTTPException: 404 if post not found
     """
     try:
-        # Check if post exists and belongs to user
         post = supabase.table("posts").select("*").eq("id", post_id).single().execute()
         
         if not post.data:
@@ -461,18 +480,14 @@ async def delete_post(post_id: str, user=Depends(get_current_user), supabase=Dep
         if post.data["user_id"] != user.id:
             raise HTTPException(status_code=403, detail="Not authorized to delete this post")
         
-        # Delete associated media files if any
         if post.data.get("media_urls") and isinstance(post.data["media_urls"], list):
-            for media_item in post.data["media_urls"]: # Renamed for clarity
+            for media_item in post.data["media_urls"]:
                 if isinstance(media_item, list) and len(media_item) == 2:
                     try:
-                        # media_item is [bucket_name, filename]
                         delete_file(bucket_name=media_item[0], file_path=media_item[1])
                     except Exception as e:
-                        # Log the error but continue with deletion
                         print(f"Failed to delete media file {media_item}: {str(e)}")
         
-        # Delete associated endorsement selfies if any
         endorsements = supabase.table("post_endorsements").select("*").eq("post_id", post_id).execute()
         if endorsements.data:
             for endorsement in endorsements.data:
@@ -480,16 +495,12 @@ async def delete_post(post_id: str, user=Depends(get_current_user), supabase=Dep
                     try:
                         delete_file("endorsements", endorsement["selfie_url"])
                     except Exception as e:
-                        # Log the error but continue with deletion
                         print(f"Failed to delete endorsement selfie {endorsement['selfie_url']}: {str(e)}")
         
-        # Delete related data from post_categories
         supabase.table("post_categories").delete().eq("post_id", post_id).execute()
         
-        # Delete related data from post_endorsements
         supabase.table("post_endorsements").delete().eq("post_id", post_id).execute()
             
-        # Delete the post
         supabase.table("posts").delete().eq("id", post_id).execute()
         return None
     except HTTPException:

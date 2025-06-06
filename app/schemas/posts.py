@@ -20,11 +20,10 @@ class PostCreate(BaseModel):
     Schema for creating a new post.
     """
     content: str = Field(..., description="Post text content")
-    media_urls: Optional[List[List[str]]] = Field(None, description="List of [bucket, filename] for media attachments")
+    media_urls: Optional[List[str]] = Field(None, description="List of [bucket, filename] for media attachments")
     location: Optional[str] = Field(None, description="Location associated with the post")
     is_private: Optional[bool] = Field(False, description="Whether the post is private")
     challenge_id: Optional[str] = Field(None, description="Associated challenge ID (must be a valid UUID)")
-    categories: Optional[list[str]] = Field(None, description="Categories for the post")
     
     @field_validator('challenge_id')
     def validate_uuid(cls, v):
@@ -42,7 +41,7 @@ class PostUpdate(BaseModel):
     All fields are optional to allow partial updates.
     """
     content: Optional[str] = Field(None, description="Post text content")
-    media_urls: Optional[List[List[str]]] = Field(None, description="List of [bucket, filename] for media attachments")
+    media_urls: Optional[List[str]] = Field(None, description="List of [bucket, filename] for media attachments")
     location: Optional[str] = Field(None, description="Location associated with the post")
     is_private: Optional[bool] = Field(None, description="Whether the post is private")
 

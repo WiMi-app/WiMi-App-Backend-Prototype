@@ -48,9 +48,6 @@ class ChallengeBase(BaseModel):
     repetition_frequency: Optional[int] = Field(
         None, description="Frequency of repetition"
     )
-    repetition_days: Optional[List[int]] = Field(
-        None, description="Days on which the challenge repeats (e.g., [1,3,5] for Mon, Wed, Fri)"
-    )
     check_in_time: Optional[time] = Field(
         None, description="Time of day for check-ins"
     )
@@ -84,7 +81,6 @@ class ChallengeUpdate(BaseModel):
     restriction: Optional[str] = Field(None)
     repetition: Optional[RepetitionType] = Field(None)
     repetition_frequency: Optional[int] = Field(None)
-    repetition_days: Optional[List[int]] = Field(None)
     check_in_time: Optional[time] = Field(None)
     is_private: Optional[bool] = Field(None)
     time_window: Optional[int] = Field(None)
@@ -119,4 +115,7 @@ class ChallengeParticipantOut(BaseModel):
     user_id: str
     joined_at: str
     status: ParticipationStatus
+    success_rate: float = Field(0.0, description="Participant's success rate")
+    streaks: int = Field(0, description="Participant's current streak")
+    count: int = Field(0, description="Participant's total success count")
     model_config = ConfigDict(from_attributes=True)
