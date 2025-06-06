@@ -80,50 +80,11 @@ class PostOut(BaseModel):
             return None
         
         processed_urls = []
-        for item_str in self.media_urls:
-            if not (isinstance(item_str, str) and item_str.startswith('{') and item_str.endswith('}')):
-                print(f"Skipping malformed media_url item string: {item_str}")
-                continue
-
-            content = item_str[1:-1]
-            
-            parts = []
-            current_element = ""
-            in_quotes = False
-            escape_next = False
-            
-            for char_idx, char in enumerate(content):
-                if escape_next:
-                    current_element += char
-                    escape_next = False
-                    continue
-                if char == '\\':
-                    escape_next = True
-                    continue
-                
-                if char == '"' and (char_idx == 0 or content[char_idx-1] != '\\'):
-                    in_quotes = not in_quotes
-                elif char == ',' and not in_quotes:
-                    parts.append(current_element)
-                    current_element = ""
-                else:
-                    current_element += char
-            parts.append(current_element)
-
-            if len(parts) == 2:
-                bucket_name = parts[0].strip()
-                file_name = parts[1].strip()
-
-                if bucket_name.startswith('"') and bucket_name.endswith('"'):
-                    bucket_name = bucket_name[1:-1].replace('\\"' ,'"')
-                if file_name.startswith('"') and file_name.endswith('"'):
-                    file_name = file_name[1:-1].replace('\\"' ,'"')
-
-                processed_urls.append(f"{settings.SUPABASE_URL}/storage/v1/object/public/{bucket_name}//{file_name}")
-            else:
-                print(f"Could not parse media_url item '{item_str}' into two parts. Parsed: {parts}")
-                
-        return processed_urls if processed_urls else None
+        for item in self.media_urls:
+            if isinstance(item, list) and len(item) == 2:
+                bucket, path = item
+                processed_urls.append(f"{settings.SUPABASE_URL}/storage/v1/object/public/{bucket}//{path}")
+        return processed_urls
 
 class SavedPostCreate(BaseModel):
     """

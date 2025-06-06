@@ -60,5 +60,5 @@ class EndorsementOut(BaseModel):
         if self.selfie_url and isinstance(self.selfie_url, list) and len(self.selfie_url) == 2:
             bucket_name, file_name = self.selfie_url
             # Bucket name for selfie_url is "selfie_url"
-            return f"{settings.SUPABASE_URL}/storage/v1/object/public/{bucket_name}/{file_name}"
+            return f"{settings.SUPABASE_URL}/storage/v1/object/public/{bucket_name}//{file_name}"
         return None 
