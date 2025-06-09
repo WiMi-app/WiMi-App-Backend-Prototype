@@ -275,7 +275,7 @@ async def upload_post_media_base64(
 
     try:
         for image_data in payload.base64_images:
-            filename = await upload_base64_image("media_urls", image_data, user.id)
+            filename = await upload_base64_image("post_media", image_data, user.id)
             processed_media_items.append(["media_urls", filename])
             uploaded_filenames_for_cleanup.append(filename)
 
