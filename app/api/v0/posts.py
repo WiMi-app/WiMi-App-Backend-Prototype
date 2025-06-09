@@ -8,6 +8,7 @@ from app.core.deps import get_current_user, get_supabase
 from app.core.media import delete_file, upload_base64_image, upload_file
 from app.core.moderation import moderate_post
 from app.schemas.posts import PostCreate, PostOut, PostUpdate
+from app.schemas.base64 import Base64Images
 
 router = APIRouter(tags=["posts"])
 
@@ -241,39 +242,53 @@ async def create_post_with_media(
                 pass
         raise HTTPException(status_code=400, detail=f"Error creating post: {str(e)}")
 
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+
+router = APIRouter()
+
+# Define request body model
+class Base64Images(BaseModel):
+    base64_images: List[str]
+
 @router.post("/media/base64", response_model=List[List[str]])
 async def upload_post_media_base64(
-    base64_images: List[str] = Form(...),
+    payload: Base64Images,
     user=Depends(get_current_user)
 ):
     """
     Upload base64 encoded media for a post.
-    
+
     Args:
-        base64_images: List of base64 encoded image data
+        payload: JSON body containing a list of base64 image strings
         user: Current authenticated user from token
-        
+
     Returns:
         List[List[str]]: List of [bucket, filename] pairs of the uploaded media
-        
+
     Raises:
         HTTPException: 400 if upload fails
     """
     processed_media_items = []
     uploaded_filenames_for_cleanup = []
+
     try:
-        for image_data in base64_images:
+        for image_data in payload.base64_images:
             filename = await upload_base64_image("media_urls", image_data, user.id)
             processed_media_items.append(["media_urls", filename])
             uploaded_filenames_for_cleanup.append(filename)
+
         return processed_media_items
+
     except Exception as e:
         for fname in uploaded_filenames_for_cleanup:
             try:
                 delete_file("media_urls", fname)
-            except Exception as e_del:
+            except Exception:
                 pass
         raise HTTPException(status_code=400, detail=f"Failed to upload media: {str(e)}")
+
 
 @router.post("/media", response_model=List[List[str]])
 async def upload_post_media(
