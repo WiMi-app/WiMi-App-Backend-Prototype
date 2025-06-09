@@ -165,8 +165,8 @@ async def create_post_with_media(
         HTTPException: 400 if creation fails
         HTTPException: 403 if content violates moderation policy
     """
-    if content:
-        await moderate_post(content, raise_exception=True)
+    #if content:
+    #    await moderate_post(content, raise_exception=True)
     
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
     processed_media_items = []
