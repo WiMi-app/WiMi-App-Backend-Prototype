@@ -72,7 +72,7 @@ async def upload_base64_image(
         result = supabase.storage.from_(BUCKETS[bucket]).upload(
             path=path,
             file=image_bytes,
-            file_options={"content-type": content_type}
+            file_options={"content-type": "image/jpg"}
         )
         
         # Get the public URL
