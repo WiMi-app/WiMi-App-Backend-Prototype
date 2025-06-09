@@ -242,16 +242,6 @@ async def create_post_with_media(
                 pass
         raise HTTPException(status_code=400, detail=f"Error creating post: {str(e)}")
 
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-
-router = APIRouter()
-
-# Define request body model
-class Base64Images(BaseModel):
-    base64_images: List[str]
-
 @router.post("/media/base64", response_model=List[List[str]])
 async def upload_post_media_base64(
     payload: Base64Images,
@@ -275,7 +265,7 @@ async def upload_post_media_base64(
 
     try:
         for image_data in payload.base64_images:
-            filename = await upload_base64_image("post_media", image_data, user.id)
+            filename = await upload_base64_image("post_media", image_data, user.id, "image/jpg")
             processed_media_items.append(["post_media", filename])
             uploaded_filenames_for_cleanup.append(filename)
 

@@ -72,11 +72,12 @@ async def upload_base64_image(
         result = supabase.storage.from_(BUCKETS[bucket]).upload(
             path=path,
             file=image_bytes,
-            file_options={"content-type": "image/jpg"}
+            file_options={"content-type": content_type}
         )
         
         # Get the public URL
-        file_path = result.get("path")
+        file_path = result.path
+
         if not file_path:
             raise ValueError("Upload succeeded but path not returned")
             
