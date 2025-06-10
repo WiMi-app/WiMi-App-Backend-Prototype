@@ -9,12 +9,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.core.config import supabase
 from app.core.deps import get_current_user, get_supabase
-from app.core.media import delete_file, upload_file
+from app.core.media import delete_file, upload_file, upload_base64_image
 from app.core.moderation import moderate_challenge
 from app.schemas.challenges import (ChallengeCreate, ChallengeOut,
                                     ChallengeParticipantOut, ChallengeUpdate,
                                     ParticipationStatus)
 from app.schemas.posts import PostOut
+from app.schemas.base64 import Base64Images
 
 router = APIRouter(tags=["challenges"])
 
@@ -504,3 +505,39 @@ async def get_challenge_ranking(challenge_id: str, metric: str, supabase=Depends
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error fetching challenge ranking: {str(e)}")
+    
+@router.post("/media/base64", response_model=List[List[str]])
+async def upload_post_media_base64(
+    payload: Base64Images,
+    user=Depends(get_current_user)
+):
+    """
+    Upload base64 encoded media for a Challenge.
+
+    Args:
+        payload: JSON body containing a list of base64 image strings
+        user: Current authenticated user from token
+
+    Returns:
+        List[List[str]]: List of [bucket, filename] pairs of the uploaded media
+
+    Raises:
+        HTTPException: 400 if upload fails
+    """
+    processed_media_items = []
+    uploaded_filenames_for_cleanup = []
+    try:
+        for image_data in payload.base64_images:
+            filename = await upload_base64_image("challenges", image_data, user.id, "image/jpg")
+            processed_media_items.append(["challenges", filename])
+            uploaded_filenames_for_cleanup.append(filename)
+
+        return processed_media_items
+
+    except Exception as e:
+        for fname in uploaded_filenames_for_cleanup:
+            try:
+                delete_file("media_urls", fname)
+            except Exception:
+                pass
+        raise HTTPException(status_code=400, detail=f"Failed to upload media: {str(e)}")

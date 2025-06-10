@@ -19,13 +19,14 @@ from app.core.config import supabase
 logger = logging.getLogger(__name__)
 
 # Define the bucket types
-BucketType = Literal["profiles", "post_media", "endorsements"]
+BucketType = Literal["profiles", "post_media", "endorsements", "challenges"]
 
 # Map of bucket names
 BUCKETS = {
     "profiles": "profiles",
     "post_media": "post_media", 
-    "endorsements": "endorsements"
+    "endorsements": "endorsements",
+    "challenges" : "challenges"
 }
 
 async def upload_base64_image(
