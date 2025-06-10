@@ -315,14 +315,29 @@ async def upload_post_media(
         raise HTTPException(status_code=400, detail=f"Failed to upload media: {str(e)}")
 
 @router.get("/", response_model=list[PostOut])
-async def list_posts(supabase=Depends(get_supabase)):
+async def list_posts(supabase=Depends(get_supabase), challenge_id: str | None = None, user_id: str | None = None):
     """
-    List all posts.
+    List all posts with optional filtering.
     
+    Args:
+        challenge_id: Optional challenge ID to filter posts by
+        user_id: Optional user ID to filter posts by
+        
     Returns:
         list[PostOut]: List of post objects
     """
-    resp = supabase.table("posts").select("*").execute()
+    # Start building the query
+    query = supabase.table("posts").select("*")
+    
+    # Apply filters if provided
+    if challenge_id:
+        query = query.eq("challenge_id", challenge_id)
+    
+    if user_id:
+        query = query.eq("user_id", user_id)
+    
+    # Execute the query
+    resp = query.execute()
     posts = resp.data
     
     for post in posts:
@@ -330,18 +345,18 @@ async def list_posts(supabase=Depends(get_supabase)):
             .select("*")\
             .eq("post_id", post["id"])\
             .execute()
-            
+                     
         endorsed_count = sum(1 for e in endorsements.data if e["status"] == "endorsed")
         pending_count = sum(1 for e in endorsements.data if e["status"] == "pending")
         endorser_ids = [e["endorser_id"] for e in endorsements.data if e["status"] == "endorsed"]
-        
+                 
         post["endorsement_info"] = {
             "is_endorsed": post.get("is_endorsed", False),
             "endorsement_count": endorsed_count,
             "pending_endorsement_count": pending_count,
             "endorser_ids": endorser_ids
         }
-    
+         
     return posts
 
 @router.get("/{post_id}", response_model=PostOut)
