@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import (APIRouter, Cookie, Depends, File, Form, Header,
                      HTTPException, UploadFile, status)
@@ -13,6 +13,32 @@ from app.schemas.users import UserOut, UserUpdate
 
 router = APIRouter(tags=["users"])
 logger = logging.getLogger(__name__)
+
+@router.get("/search", response_model=List[UserOut])
+async def search_users(q: str):
+    """
+    Search for users by username or full name.
+    """
+    if not q:
+        return []
+
+    try:
+        # Search for users where username or full_name contains the query string (case-insensitive)
+        # The 'or' filter requires the f"({filter1},{filter2})" syntax
+        # Note: Supabase's Python client uses `ilike` for case-insensitive LIKE.
+        # The `*` is a wildcard for "any characters".
+        search_query = f"{q}%"
+        resp = (
+            supabase.table("users")
+            .select("id,username,full_name,avatar_url,email")
+            .or_(f"username.ilike.{search_query},full_name.ilike.{search_query}")
+            .limit(10)
+            .execute()
+        )
+        return resp.data
+    except Exception as e:
+        logger.error(f"Error searching users: {e}")
+        raise HTTPException(status_code=500, detail="Error searching users")
 
 @router.get(f"/me", response_model=UserOut)
 async def read_current_user(user=Depends(get_current_user)):
