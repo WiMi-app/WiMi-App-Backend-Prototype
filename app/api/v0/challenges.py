@@ -13,14 +13,14 @@ from app.core.media import delete_file, upload_file, upload_base64_image
 from app.core.moderation import moderate_challenge
 from app.schemas.challenges import (ChallengeCreate, ChallengeOut,
                                     ChallengeParticipantOut, ChallengeUpdate,
-                                    ParticipationStatus)
+                                    ParticipationStatus, ChallengeBase)
 from app.schemas.posts import PostOut
 from app.schemas.base64 import Base64Images
 
 router = APIRouter(tags=["challenges"])
 
 @router.post("/", response_model=ChallengeOut, status_code=status.HTTP_201_CREATED)
-async def create_challenge(payload: ChallengeCreate, user=Depends(get_current_user), supabase=Depends(get_supabase)):
+async def create_challenge(payload: ChallengeBase, user=Depends(get_current_user), supabase=Depends(get_supabase)):
     """
     Create a new challenge.
     
