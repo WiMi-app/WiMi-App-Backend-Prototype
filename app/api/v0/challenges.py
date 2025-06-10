@@ -20,7 +20,7 @@ from app.schemas.base64 import Base64Images
 router = APIRouter(tags=["challenges"])
 
 @router.post("/", response_model=ChallengeOut, status_code=status.HTTP_201_CREATED)
-async def create_challenge(payload: ChallengeCreate, user=Depends(get_current_user)):
+async def create_challenge(payload: ChallengeCreate, user=Depends(get_current_user), supabase=Depends(get_supabase)):
     """
     Create a new challenge.
     
@@ -38,6 +38,7 @@ async def create_challenge(payload: ChallengeCreate, user=Depends(get_current_us
     try:
         #if payload.description:
         #    await moderate_challenge(payload.description, raise_exception=True)
+        
         record = payload.model_dump()
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
         record.update({"creator_id": user.id, "created_at": now, "updated_at": now})
