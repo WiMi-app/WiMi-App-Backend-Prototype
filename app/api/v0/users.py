@@ -15,11 +15,11 @@ router = APIRouter(tags=["users"])
 logger = logging.getLogger(__name__)
 
 @router.get("/search", response_model=List[UserOut])
-async def search_users(q: str):
+async def search_users(query: str):
     """
     Search for users by username or full name.
     """
-    if not q:
+    if not query:
         return []
 
     try:
@@ -27,7 +27,7 @@ async def search_users(q: str):
         # The 'or' filter requires the f"({filter1},{filter2})" syntax
         # Note: Supabase's Python client uses `ilike` for case-insensitive LIKE.
         # The `*` is a wildcard for "any characters".
-        search_query = f"{q}%"
+        search_query = f"{query}%"
         resp = (
             supabase.table("users")
             .select("id,username,full_name,avatar_url,email")
