@@ -17,27 +17,17 @@ logger = logging.getLogger(__name__)
 @router.get("/search", response_model=List[UserOut])
 async def search_users(query: str):
     """
-    Search for users by username or full name.
+    Search for users by username or full name using a ranked RPC call.
     """
     if not query:
         return []
 
     try:
-        # Search for users where username or full_name contains the query string (case-insensitive)
-        # The 'or' filter requires the f"({filter1},{filter2})" syntax
-        # Note: Supabase's Python client uses `ilike` for case-insensitive LIKE.
-        # The `*` is a wildcard for "any characters".
-        search_query = f"{query}%"
-        resp = (
-            supabase.table("users")
-            .select("id,username,full_name,avatar_url,email")
-            .or_(f"username.ilike.{search_query},full_name.ilike.{search_query}")
-            .limit(10)
-            .execute()
-        )
+        # Use RPC to call the search_users function in the database for ranked results
+        resp = supabase.rpc("search_users", {"p_search_term": query}).execute()
         return resp.data
     except Exception as e:
-        logger.error(f"Error searching users: {e}")
+        logger.error(f"Error searching users via RPC: {e}")
         raise HTTPException(status_code=500, detail="Error searching users")
 
 @router.get(f"/me", response_model=UserOut)
