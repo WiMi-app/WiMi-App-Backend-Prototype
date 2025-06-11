@@ -17,6 +17,10 @@ from app.schemas.challenges import (ChallengeCreate, ChallengeOut,
 from app.schemas.posts import PostOut
 from app.schemas.base64 import Base64Images
 
+from sentence_transformers import SentenceTransformer
+from transformers import pipeline
+import json
+
 router = APIRouter(tags=["challenges"])
 
 @router.post("/", response_model=ChallengeOut, status_code=status.HTTP_201_CREATED)
@@ -48,8 +52,9 @@ async def create_challenge(payload: ChallengeBase, user=Depends(get_current_user
         if "due_date" in record and record["due_date"] is not None:
             record["due_date"] = record["due_date"].strftime("%Y-%m-%dT%H:%M:%S.%f")
         
-        resp = supabase.table("challenges").insert(record).execute()
         
+        resp = supabase.table("challenges").insert(record).execute()
+
         if not resp.data:
             raise HTTPException(status_code=400, detail="Failed to create challenge")
         
@@ -541,3 +546,34 @@ async def upload_post_media_base64(
             except Exception:
                 pass
         raise HTTPException(status_code=400, detail=f"Failed to upload media: {str(e)}")
+
+
+@router.get("/search/challenges", response_model=list[ChallengeOut])
+async def vector_search(
+    query: str
+):
+    """
+    Searching for Challenges
+
+    Args:
+        query: search keyword
+
+    Returns:
+        List[ChallengeOut]
+
+    Raises:
+        HTTPException: 500 if search fails
+    """
+
+    try:
+        model = SentenceTransformer("all-MiniLM-L6-v2")
+        query_embedding = model.encode(query).tolist()
+        #print(query_embedding)
+
+        resp = supabase.rpc("search_challenges", {"query_embedding": query_embedding}).execute()
+
+        print("Raw Response from Supabase:", resp)
+        return resp.data
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
