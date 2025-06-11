@@ -33,7 +33,7 @@ class ChallengeBase(BaseModel):
     description: str = Field(
         None, description="Challenge details"
     )
-    due_date: Optional[datetime] = Field(
+    due_date: Optional[str] = Field(
         None, description="When the challenge ends"
     )
     location: Optional[str] = Field(
