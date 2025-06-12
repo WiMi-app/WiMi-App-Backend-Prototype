@@ -23,6 +23,7 @@ import json
 
 router = APIRouter(tags=["challenges"])
 
+## ADD EMBEDDING
 @router.post("/", response_model=ChallengeOut, status_code=status.HTTP_201_CREATED)
 async def create_challenge(payload: ChallengeBase, user=Depends(get_current_user), supabase=Depends(get_supabase)):
     """
@@ -51,6 +52,12 @@ async def create_challenge(payload: ChallengeBase, user=Depends(get_current_user
             record["check_in_time"] = record["check_in_time"].strftime("%H:%M:%S")
         if "due_date" in record and record["due_date"] is not None:
             record["due_date"] = record["due_date"].strftime("%Y-%m-%dT%H:%M:%S.%f")
+        
+        if "embedding" in record and record["embedding"] is None:
+            model = SentenceTransformer("all-MiniLM-L6-v2")
+            string_to_vectorize = f"{record["title"]} {record["description"]} {record["location"]}"
+            content_embedding = model.encode(string_to_vectorize).tolist()
+            record["embedding"] = content_embedding
         
         
         resp = supabase.table("challenges").insert(record).execute()
@@ -98,6 +105,7 @@ async def get_challenge(challenge_id: str):
     except Exception as e:
         raise HTTPException(status_code=404, detail="Challenge not found")
 
+## ADD EMBEDDING
 @router.put("/{challenge_id}", response_model=ChallengeOut)
 async def update_challenge(challenge_id: str, payload: ChallengeUpdate, user=Depends(get_current_user)):
     """
@@ -145,6 +153,12 @@ async def update_challenge(challenge_id: str, payload: ChallengeUpdate, user=Dep
         if "check_in_time" in update_data and update_data["check_in_time"] is not None:
             update_data["check_in_time"] = update_data["check_in_time"].strftime("%H:%M:%S")
         
+        ## Change Embedding
+        model = SentenceTransformer("all-MiniLM-L6-v2")
+        embedding_str = f"{update_data["title"]} {update_data["description"]} {update_data["location"]}"
+        embedding_vector = model.encode(embedding_str).tolist()
+        update_data["embedding"] = embedding_vector
+
         supabase.table("challenges").update(update_data).eq("id", challenge_id).execute()
         
         updated = supabase.table("challenges").select("*").eq("id", challenge_id).single().execute()
@@ -572,8 +586,23 @@ async def vector_search(
 
         resp = supabase.rpc("search_challenges", {"query_embedding": query_embedding}).execute()
 
-        print("Raw Response from Supabase:", resp)
+        #print("Raw Response from Supabase:", resp)
         return resp.data
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+@router.post("/challenge/embeddings", response_model=list[ChallengeOut])
+async def update_embeddings():
+    try:
+        resp = supabase.table("challenges").select("*").execute()
+        model = SentenceTransformer("all-MiniLM-L6-v2")
+        for challenge in resp.data:
+            combined_str = f"{challenge["title"]} {challenge["description"]} {challenge["location"]}"
+            content_embedding = model.encode(combined_str).tolist()
+            challenge["embedding"] = content_embedding
+            respond = supabase.table("challenges").update(challenge).eq("id", challenge["id"]).execute()
+        return resp.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating embeddings {str(e)}")
+    

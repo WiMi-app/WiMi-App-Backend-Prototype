@@ -66,3 +66,4 @@ supabase: Client = create_client(
     supabase_url=str(settings.SUPABASE_URL),
     supabase_key=settings.SUPABASE_KEY,
 )
+

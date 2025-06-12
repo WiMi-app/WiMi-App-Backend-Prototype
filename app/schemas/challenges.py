@@ -1,12 +1,12 @@
 from datetime import datetime, time
 from enum import Enum
 from typing import List, Optional
-
+import json
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.config import settings
 
-
+from pydantic import field_validator
 class RepetitionType(str, Enum):
     """Enum for challenge repetition types"""
     DAILY = "daily"
@@ -60,6 +60,18 @@ class ChallengeBase(BaseModel):
     background_photo: Optional[List[str]] = Field(
         None, description="[bucket, filename] for the challenge background photo"
     )
+    embedding: Optional[List[float]] = Field(
+        None, description="vector value for vector search"
+    )
+    @field_validator("embedding", mode="before")
+    @classmethod
+    def parse_embedding(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return None
+        return v
 
 class ChallengeCreate(ChallengeBase):
     """
