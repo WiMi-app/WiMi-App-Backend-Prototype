@@ -28,3 +28,5 @@ pytest-asyncio
 
 # AI and advanced features
 openai
+sentence-transformers
+transformers
