@@ -586,8 +586,7 @@ async def vector_search(
     """
 
     try:
-        model = SentenceTransformer("all-MiniLM-L6-v2")
-        query_embedding = model.encode(query).tolist()
+        query_embedding = get_embedding(query)
         #print(query_embedding)
 
         resp = supabase.rpc("search_challenges", {"query_embedding": query_embedding}).execute()
