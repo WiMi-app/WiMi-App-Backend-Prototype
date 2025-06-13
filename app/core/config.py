@@ -3,6 +3,7 @@ import os
 from pydantic import ConfigDict, Field
 from pydantic_settings import BaseSettings
 from supabase import Client, create_client
+from sentence_transformers import SentenceTransformer
 
 
 class Settings(BaseSettings):
@@ -26,6 +27,9 @@ class Settings(BaseSettings):
 
     # ─── OpenAI ─────────────────────────────────────────────────────────────
     OPENAI_KEY: str = Field(os.getenv("OPENAI_API_KEY"), env="OPENAI_API_KEY")
+
+    # ─── EMBEDDING ─────────────────────────────────────────────────────────────
+    EMBEDDING_MODEL: SentenceTransformer = SentenceTransformer("all-MiniLM-L6-v2")
 
     # ─── JWT / Auth ───────────────────────────────────────────────────────────
     JWT_SECRET: str = Field(os.getenv("JWT_SECRET"), env="JWT_SECRET")

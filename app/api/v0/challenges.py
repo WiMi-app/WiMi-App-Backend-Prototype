@@ -17,13 +17,15 @@ from app.schemas.challenges import (ChallengeCreate, ChallengeOut,
 from app.schemas.posts import PostOut
 from app.schemas.base64 import Base64Images
 
-from sentence_transformers import SentenceTransformer
-from transformers import pipeline
-import json
+from app.core.config import settings
+
 
 router = APIRouter(tags=["challenges"])
+embedding_model = settings.EMBEDDING_MODEL
 
-## ADD EMBEDDING
+def get_embedding(text: str) -> list[float]:
+    return embedding_model.encode(text).tolist()
+
 @router.post("/", response_model=ChallengeOut, status_code=status.HTTP_201_CREATED)
 async def create_challenge(payload: ChallengeBase, user=Depends(get_current_user), supabase=Depends(get_supabase)):
     """
@@ -54,9 +56,8 @@ async def create_challenge(payload: ChallengeBase, user=Depends(get_current_user
             record["due_date"] = record["due_date"].strftime("%Y-%m-%dT%H:%M:%S.%f")
         
         if "embedding" in record and record["embedding"] is None:
-            model = SentenceTransformer("all-MiniLM-L6-v2")
-            string_to_vectorize = f"{record["title"]} {record["description"]} {record["location"]}"
-            content_embedding = model.encode(string_to_vectorize).tolist()
+            string_to_vectorize = f"{record["title"]}\n{record["description"]}\n{record["location"]}"
+            content_embedding = get_embedding(string_to_vectorize)
             record["embedding"] = content_embedding
         
         
@@ -105,7 +106,6 @@ async def get_challenge(challenge_id: str):
     except Exception as e:
         raise HTTPException(status_code=404, detail="Challenge not found")
 
-## ADD EMBEDDING
 @router.put("/{challenge_id}", response_model=ChallengeOut)
 async def update_challenge(challenge_id: str, payload: ChallengeUpdate, user=Depends(get_current_user)):
     """
@@ -153,10 +153,8 @@ async def update_challenge(challenge_id: str, payload: ChallengeUpdate, user=Dep
         if "check_in_time" in update_data and update_data["check_in_time"] is not None:
             update_data["check_in_time"] = update_data["check_in_time"].strftime("%H:%M:%S")
         
-        ## Change Embedding
-        model = SentenceTransformer("all-MiniLM-L6-v2")
-        embedding_str = f"{update_data["title"]} {update_data["description"]} {update_data["location"]}"
-        embedding_vector = model.encode(embedding_str).tolist()
+        embedding_str = f"{update_data["title"]}\n{update_data["description"]}\n{update_data["location"]}"
+        embedding_vector = get_embedding(embedding_str)
         update_data["embedding"] = embedding_vector
 
         supabase.table("challenges").update(update_data).eq("id", challenge_id).execute()
