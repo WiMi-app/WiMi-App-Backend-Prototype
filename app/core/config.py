@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     OPENAI_KEY: str = Field(os.getenv("OPENAI_API_KEY"), env="OPENAI_API_KEY")
 
     # ─── EMBEDDING ─────────────────────────────────────────────────────────────
-    EMBEDDING_MODEL: SentenceTransformer = SentenceTransformer("all-MiniLM-L6-v2")
+    EMBEDDING_MODEL: SentenceTransformer = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
 
     # ─── JWT / Auth ───────────────────────────────────────────────────────────
     JWT_SECRET: str = Field(os.getenv("JWT_SECRET"), env="JWT_SECRET")

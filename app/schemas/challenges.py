@@ -1,12 +1,13 @@
+import json
 from datetime import datetime, time
 from enum import Enum
 from typing import List, Optional
-import json
-from pydantic import BaseModel, ConfigDict, Field
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.config import settings
 
-from pydantic import field_validator
+
 class RepetitionType(str, Enum):
     """Enum for challenge repetition types"""
     DAILY = "daily"
@@ -33,7 +34,7 @@ class ChallengeBase(BaseModel):
     description: str = Field(
         None, description="Challenge details"
     )
-    due_date: Optional[str] = Field(
+    due_date: Optional[datetime] = Field(
         None, description="When the challenge ends"
     )
     location: Optional[str] = Field(

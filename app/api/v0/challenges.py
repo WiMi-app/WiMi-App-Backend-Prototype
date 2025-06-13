@@ -7,18 +7,15 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
-from app.core.config import supabase
+from app.core.config import settings, supabase
 from app.core.deps import get_current_user, get_supabase
-from app.core.media import delete_file, upload_file, upload_base64_image
+from app.core.media import delete_file, upload_base64_image, upload_file
 from app.core.moderation import moderate_challenge
-from app.schemas.challenges import (ChallengeCreate, ChallengeOut,
-                                    ChallengeParticipantOut, ChallengeUpdate,
-                                    ParticipationStatus, ChallengeBase)
-from app.schemas.posts import PostOut
 from app.schemas.base64 import Base64Images
-
-from app.core.config import settings
-
+from app.schemas.challenges import (ChallengeBase, ChallengeCreate,
+                                    ChallengeOut, ChallengeParticipantOut,
+                                    ChallengeUpdate, ParticipationStatus)
+from app.schemas.posts import PostOut
 
 router = APIRouter(tags=["challenges"])
 embedding_model = settings.EMBEDDING_MODEL
@@ -50,13 +47,16 @@ async def create_challenge(payload: ChallengeBase, user=Depends(get_current_user
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
         record.update({"creator_id": user.id, "created_at": now, "updated_at": now})
         
-        if "check_in_time" in record and record["check_in_time"] is not None:
+        if record.get("check_in_time"):
             record["check_in_time"] = record["check_in_time"].strftime("%H:%M:%S")
-        if "due_date" in record and record["due_date"] is not None:
+        if record.get("due_date"):
             record["due_date"] = record["due_date"].strftime("%Y-%m-%dT%H:%M:%S.%f")
         
-        if "embedding" in record and record["embedding"] is None:
-            string_to_vectorize = f"{record["title"]}\n{record["description"]}\n{record["location"]}"
+        if record.get("embedding") is None:
+            title = record.get("title", "")
+            description = record.get("description", "")
+            location = record.get("location", "")
+            string_to_vectorize = f"{title}\n{description}\n{location}"
             content_embedding = get_embedding(string_to_vectorize)
             record["embedding"] = content_embedding
         
@@ -124,15 +124,16 @@ async def update_challenge(challenge_id: str, payload: ChallengeUpdate, user=Dep
         HTTPException: 404 if challenge not found
     """
     try:
-        existing_challenge_resp = supabase.table("challenges").select("creator_id, background_photo").eq("id", challenge_id).single().execute()
+        existing_challenge_resp = supabase.table("challenges").select("*").eq("id", challenge_id).single().execute()
         
         if not existing_challenge_resp.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Challenge not found")
 
-        if existing_challenge_resp.data["creator_id"] != user.id:
+        existing_challenge = existing_challenge_resp.data
+        if existing_challenge["creator_id"] != user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this challenge")
         
-        current_background_photo = existing_challenge_resp.data.get("background_photo")
+        current_background_photo = existing_challenge.get("background_photo")
 
         if payload.description:
             await moderate_challenge(payload.description, raise_exception=True)
@@ -141,7 +142,7 @@ async def update_challenge(challenge_id: str, payload: ChallengeUpdate, user=Dep
         update_data["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
 
         if "background_photo" in update_data:
-            new_background_photo = update_data["background_photo"] # This is List[str] or None
+            new_background_photo = update_data["background_photo"]
 
             if current_background_photo and isinstance(current_background_photo, list) and len(current_background_photo) == 2:
                 if new_background_photo != current_background_photo:
@@ -150,10 +151,17 @@ async def update_challenge(challenge_id: str, payload: ChallengeUpdate, user=Dep
                     except Exception as e_del:
                         print(f"Failed to delete old background photo {current_background_photo}: {e_del}")
         
-        if "check_in_time" in update_data and update_data["check_in_time"] is not None:
+        if update_data.get("check_in_time"):
             update_data["check_in_time"] = update_data["check_in_time"].strftime("%H:%M:%S")
         
-        embedding_str = f"{update_data["title"]}\n{update_data["description"]}\n{update_data["location"]}"
+        if update_data.get("due_date"):
+            update_data["due_date"] = update_data["due_date"].strftime("%Y-%m-%dT%H:%M:%S.%f")
+
+        challenge_for_embedding = {**existing_challenge, **update_data}
+        title = challenge_for_embedding.get("title", "")
+        description = challenge_for_embedding.get("description", "")
+        location = challenge_for_embedding.get("location", "")
+        embedding_str = f"{title}\n{description}\n{location}"
         embedding_vector = get_embedding(embedding_str)
         update_data["embedding"] = embedding_vector
 
