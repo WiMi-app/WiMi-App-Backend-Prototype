@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import (APIRouter, Cookie, Depends, File, Form, Header,
                      HTTPException, UploadFile, status)
@@ -13,6 +13,22 @@ from app.schemas.users import UserOut, UserUpdate
 
 router = APIRouter(tags=["users"])
 logger = logging.getLogger(__name__)
+
+@router.get("/search", response_model=List[UserOut])
+async def search_users(query: str):
+    """
+    Search for users by username or full name using a ranked RPC call.
+    """
+    if not query:
+        return []
+
+    try:
+        # Use RPC to call the search_users function in the database for ranked results
+        resp = supabase.rpc("search_users", {"p_search_term": query}).execute()
+        return resp.data
+    except Exception as e:
+        logger.error(f"Error searching users via RPC: {e}")
+        raise HTTPException(status_code=500, detail="Error searching users")
 
 @router.get(f"/me", response_model=UserOut)
 async def read_current_user(user=Depends(get_current_user)):

@@ -57,47 +57,93 @@ def like_post(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Error: {str(e)}")
 
 @router.delete(
-    "/{like_id}",
+    "/{post_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Remove a like",
 )
 def unlike_post(
-    like_id: str,
+    post_id: str,
     current_user=Depends(get_current_user),
     supabase=Depends(get_supabase),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
     """
     Remove a like by its ID.
     
     Args:
-        like_id (str): UUID of the like to remove
+        post_id (str): UUID of the post to unlike
         current_user: Current authenticated user from token
         supabase: Supabase client instance
+        idempotency_key: Optional idempotency key for duplicate request prevention
         
     Returns:
         Response: 204 No Content on success
         
     Raises:
+        HTTPException: 404 if like not found
         HTTPException: 403 if user is not authorized to remove the like
         HTTPException: 400 if database operation fails
     """
     try:
         # Check if like exists and belongs to current user
-        rec = supabase.table("likes").select("user_id").eq("id", like_id).execute()
+        rec = supabase.table("likes").select("*").eq("user_id", current_user.id).eq("post_id", post_id).execute()
         
         if not rec.data or len(rec.data) == 0:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Like not found")
-            
-        if rec.data[0]["user_id"] != current_user.id:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized")
-            
+        
+        # No need to check user_id again since we already filtered by current_user.id
+        
         # Delete the like
-        supabase.table("likes").delete().eq("id", like_id).execute()
+        supabase.table("likes").delete().eq("user_id", current_user.id).eq("post_id", post_id).execute()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+        
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Error: {str(e)}")
+    
+@router.get("/me/{post_id}")
+def get_MyLike(
+    post_id: str,
+    current_user=Depends(get_current_user),
+    supabase=Depends(get_supabase),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key")
+):
+    """
+    Get if I liked a specific post.
+
+    Args: 
+        post_id (str): UUID of the post to check
+        current_user: Current authenticated user from token
+        supabase: Supabase client instance
+        idempotency_key: Optional idempotency key (unused in this context)
+    
+    Returns:
+        dict: {"liked": bool, "like_id": str | None} - Whether user liked the post and the like ID if it exists
+
+    Raises:
+        HTTPException: 400 if database operation fails
+        HTTPException: 401 if user is not authenticated
+    """
+    try:
+        # Check if current user has liked this post
+        rec = supabase.table("likes").select("*").eq("user_id", current_user.id).eq("post_id", post_id).execute()
+        
+        if rec.data and len(rec.data) > 0:
+            return {
+                "liked": True,
+                "like_id": rec.data[0].get("id")  # or whatever your like ID field is called
+            }
+        else:
+            return {
+                "liked": False,
+                "like_id": None
+            }
+            
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Error checking like status: {str(e)}")
 
 @router.get(
     "/by-post/{post_id}/users",
