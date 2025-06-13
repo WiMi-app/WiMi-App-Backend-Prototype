@@ -66,13 +66,33 @@ class PostOut(BaseModel):
     media_urls: Optional[List[str]] = None
     location: Optional[str] = None
     is_private: bool
-    created_at: str
-    updated_at: str
+    created_at: datetime
+    updated_at: datetime
     edited: bool
     challenge_id: Optional[str] = None
     is_endorsed: bool = False
     endorsement_info: Optional[PostEndorsementInfo] = None
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def parse_created_at(cls, v):
+        if isinstance(v, str):
+            try:
+                return datetime.fromisoformat(v)
+            except ValueError:
+                return None
+        return v
+
+    @field_validator("updated_at", mode="before")
+    @classmethod
+    def parse_updated_at(cls, v):
+        if isinstance(v, str): 
+            try:
+                return datetime.fromisoformat(v)
+            except ValueError:
+                return None
+        return v
 
     @property
     def full_media_urls(self) -> Optional[List[str]]:

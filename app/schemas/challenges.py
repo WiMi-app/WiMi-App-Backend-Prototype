@@ -64,6 +64,20 @@ class ChallengeBase(BaseModel):
     embedding: Optional[List[float]] = Field(
         None, description="vector value for vector search"
     )
+    @field_validator("due_date", mode="before")
+    @classmethod
+    def parse_due_date(cls, v):
+        if isinstance(v, str):
+            try:
+                # Handle Supabase's non-standard timezone format (+00)
+                if v.endswith("+00"):
+                    v_fixed = v + ":00"
+                    return datetime.fromisoformat(v_fixed)
+                return datetime.fromisoformat(v)
+            except ValueError:
+                return None
+        return v
+        
     @field_validator("embedding", mode="before")
     @classmethod
     def parse_embedding(cls, v):

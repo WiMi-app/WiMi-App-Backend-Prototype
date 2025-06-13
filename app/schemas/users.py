@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-
+from pydantic import field_validator
 from app.core.config import settings
 
 
@@ -25,7 +25,7 @@ class UserOut(UserBase):
     id: str
     avatar_url: Optional[List[str]] = None
     bio: Optional[str] = None
-    updated_at: str = Field(default_factory=lambda: datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f"))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f"))
 
     @property
     def full_avatar_url(self) -> Optional[str]:
@@ -34,6 +34,16 @@ class UserOut(UserBase):
             file_name = self.avatar_url[1]
             return f"{settings.SUPABASE_URL}/storage/v1/object/public/{bucket_name}//{file_name}"
         return None
+    
+    @field_validator("updated_at", mode="before")  
+    @classmethod
+    def parse_updated_at(cls, v):
+        if isinstance(v, str):
+            try:
+                return datetime.fromisoformat(v)
+            except ValueError:
+                return None
+        return v
 
 class UserUpdate(BaseModel):
     """

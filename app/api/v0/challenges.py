@@ -601,10 +601,9 @@ async def vector_search(
 async def update_embeddings():
     try:
         resp = supabase.table("challenges").select("*").execute()
-        model = SentenceTransformer("all-MiniLM-L6-v2")
         for challenge in resp.data:
             combined_str = f"{challenge["title"]} {challenge["description"]} {challenge["location"]}"
-            content_embedding = model.encode(combined_str).tolist()
+            content_embedding = get_embedding(combined_str)
             challenge["embedding"] = content_embedding
             respond = supabase.table("challenges").update(challenge).eq("id", challenge["id"]).execute()
         return resp.data

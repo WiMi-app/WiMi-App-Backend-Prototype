@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class NotificationType(str, Enum):
@@ -39,3 +39,10 @@ class NotificationOut(BaseModel):
     created_at: datetime
     status: NotificationStatus
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def parse_created_at(cls, v):
+        if isinstance(v, str):
+            return datetime.fromisoformat(v)
+        return v

@@ -1,8 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
-
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 class CommentCreate(BaseModel):
     """
@@ -30,6 +29,16 @@ class CommentOut(BaseModel):
     post_id: str
     user_id: str
     content: str
-    created_at: str
+    created_at: datetime
     parent_comment_id: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def parse_created_at(cls, v):
+        if isinstance(v, str):
+            try:
+                return datetime.fromisoformat(v)
+            except ValueError:
+                return None
+        return v

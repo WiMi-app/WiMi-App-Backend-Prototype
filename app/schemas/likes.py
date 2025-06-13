@@ -1,7 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
-
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 class LikeCreate(BaseModel):
     """
@@ -20,3 +19,10 @@ class LikeOut(BaseModel):
     user_id: str
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def parse_created_at(cls, v):
+        if isinstance(v, str):
+            return datetime.fromisoformat(v)
+        return v
