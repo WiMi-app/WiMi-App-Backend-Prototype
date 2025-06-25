@@ -119,7 +119,7 @@ async def upload_file(
         contents = await file.read()
         
         # Get file extension
-        _, ext = os.path.splitext(file.filename)
+        _, ext = os.path.splitext(file.filename or "")
         if not ext:
             # Default to .jpg for images without extension
             ext = ".jpg"
@@ -137,7 +137,7 @@ async def upload_file(
         result = supabase.storage.from_(BUCKETS[bucket]).upload(
             path=path,
             file=contents,
-            file_options={"content-type": file.content_type}
+            file_options=FileOptions(content_type=file.content_type)
         )
         
         # Get the public URL

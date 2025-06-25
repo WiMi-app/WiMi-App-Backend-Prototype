@@ -32,7 +32,7 @@ class ChallengeBase(BaseModel):
         ..., min_length=3, max_length=255, description="Challenge title"
     )
     description: str = Field(
-        None, description="Challenge details"
+        "", description="Challenge details"
     )
     due_date: Optional[datetime] = Field(
         None, description="When the challenge ends"
