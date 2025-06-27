@@ -31,3 +31,9 @@ openai
 sentence-transformers
 transformers
 numpy<2.0
+
+# Google Cloud integration
+google-auth-oauthlib
+google-cloud-scheduler
+firebase-admin
+pytz

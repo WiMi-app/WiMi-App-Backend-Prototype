@@ -50,7 +50,7 @@ class ChallengeBase(BaseModel):
         None, description="Frequency of repetition"
     )
     check_in_time: Optional[time] = Field(
-        None, description="Time of day for check-ins"
+        None, description="Local time of day for check-ins (e.g., 09:00:00)"
     )
     is_private: bool = Field(
         False, description="Whether the challenge is private"
@@ -93,7 +93,7 @@ class ChallengeCreate(ChallengeBase):
     Schema for creating a new challenge.
     Inherits all fields from ChallengeBase.
     """
-    pass
+    user_timezone: str = Field(..., description="User's current timezone (e.g., 'America/New_York')")
 
 
 class ChallengeUpdate(BaseModel):
@@ -123,6 +123,7 @@ class ChallengeOut(ChallengeBase):
     creator_id: str
     created_at: str
     updated_at: str
+    scheduler_job_ids: Optional[dict] = None
     model_config = ConfigDict(from_attributes=True)
 
     @property

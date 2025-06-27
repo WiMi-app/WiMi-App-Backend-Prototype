@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 
 from pydantic import ConfigDict, Field
 from pydantic_settings import BaseSettings
@@ -27,6 +28,11 @@ class Settings(BaseSettings):
 
     # ─── OpenAI ─────────────────────────────────────────────────────────────
     OPENAI_KEY: str = Field(os.getenv("OPENAI_API_KEY"), env="OPENAI_API_KEY")
+
+    # ─── Google Cloud ───────────────────────────────────────────────────────
+    GCP_PROJECT_ID: str = Field(os.getenv("GCP_PROJECT_ID"), env="GCP_PROJECT_ID")
+    GCP_LOCATION: str = Field(os.getenv("GCP_LOCATION"), env="GCP_LOCATION")
+    CLOUD_FUNCTION_URL: str = Field(os.getenv("CLOUD_FUNCTION_URL"), env="CLOUD_FUNCTION_URL")
 
     # ─── EMBEDDING ─────────────────────────────────────────────────────────────
     EMBEDDING_MODEL: SentenceTransformer = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")

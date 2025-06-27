@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import (APIRouter, Cookie, Depends, File, Form, Header,
-                     HTTPException, UploadFile, status)
+                     HTTPException, UploadFile, status, Body)
 from fastapi.responses import JSONResponse
 
 from app.core.config import supabase
@@ -106,6 +106,20 @@ async def update_user(payload: UserUpdate, user=Depends(get_current_user)):
         .select("id,username,full_name,avatar_url,email")\
         .eq("id", user.id)\
         .single().execute().data
+
+@router.put("/me/fcm-token", status_code=status.HTTP_204_NO_CONTENT)
+async def update_fcm_token(
+    fcm_token: str = Body(..., embed=True),
+    user=Depends(get_current_user)
+):
+    """
+    Update the FCM token for the currently authenticated user.
+    """
+    try:
+        supabase.table("users").update({"fcm_token": fcm_token}).eq("id", user.id).execute()
+    except Exception as e:
+        logger.error(f"Failed to update FCM token for user {user.id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update FCM token")
 
 @router.post("/me/avatar", response_model=UserOut)
 async def upload_avatar(

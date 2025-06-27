@@ -25,6 +25,8 @@ class UserOut(UserBase):
     id: str
     avatar_url: Optional[List[str]] = None
     bio: Optional[str] = None
+    fcm_token: Optional[str] = None
+    timezone: Optional[str] = None
     updated_at: datetime = Field(default_factory=lambda: datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f"))
 
     @property
@@ -57,4 +59,5 @@ class UserUpdate(BaseModel):
     )
     bio: Optional[str] = None
     avatar_url: Optional[List[str]] = None
+    timezone: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)

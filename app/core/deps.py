@@ -112,7 +112,7 @@ def get_current_user(
 
     # Fetch user profile from database
     resp = supabase.table("users")\
-        .select("id,username,email,full_name,avatar_url,bio,updated_at")\
+        .select("id,username,email,full_name,avatar_url,bio,updated_at,fcm_token,timezone")\
         .eq("id", user_id)\
         .single().execute()
     if not resp.data:
