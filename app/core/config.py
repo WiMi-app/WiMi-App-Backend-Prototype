@@ -1,8 +1,8 @@
 import os
 from typing import Optional
 
-from pydantic import ConfigDict, Field
-from pydantic_settings import BaseSettings
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from supabase import Client, create_client
 from sentence_transformers import SentenceTransformer
 
@@ -23,38 +23,38 @@ class Settings(BaseSettings):
     API_V1_STR: str = Field("/api/v0", env="API_V1_STR")
 
     # ─── Supabase ─────────────────────────────────────────────────────────────
-    SUPABASE_URL: str = Field(os.getenv("SUPABASE_URL"), env="SUPABASE_URL")
-    SUPABASE_KEY: str = Field(os.getenv("SUPABASE_KEY"), env="SUPABASE_KEY")
+    SUPABASE_URL: str | None = Field(os.getenv("SUPABASE_URL"), env="SUPABASE_URL")
+    SUPABASE_KEY: str | None = Field(os.getenv("SUPABASE_KEY"), env="SUPABASE_KEY")
 
     # ─── OpenAI ─────────────────────────────────────────────────────────────
-    OPENAI_KEY: str = Field(os.getenv("OPENAI_API_KEY"), env="OPENAI_API_KEY")
+    OPENAI_KEY: str | None = Field(os.getenv("OPENAI_API_KEY"), env="OPENAI_API_KEY")
 
     # ─── Google Cloud ───────────────────────────────────────────────────────
-    GCP_PROJECT_ID: str = Field(os.getenv("GCP_PROJECT_ID"), env="GCP_PROJECT_ID")
-    GCP_LOCATION: str = Field(os.getenv("GCP_LOCATION"), env="GCP_LOCATION")
-    CLOUD_FUNCTION_URL: str = Field(os.getenv("CLOUD_FUNCTION_URL"), env="CLOUD_FUNCTION_URL")
+    GCP_PROJECT_ID: str | None = Field(os.getenv("GCP_PROJECT_ID"), env="GCP_PROJECT_ID")
+    GCP_LOCATION: str | None = Field(os.getenv("GCP_LOCATION"), env="GCP_LOCATION")
+    CLOUD_FUNCTION_URL: str | None = Field(os.getenv("CLOUD_FUNCTION_URL"), env="CLOUD_FUNCTION_URL")
 
     # ─── EMBEDDING ─────────────────────────────────────────────────────────────
     EMBEDDING_MODEL: SentenceTransformer = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
 
     # ─── JWT / Auth ───────────────────────────────────────────────────────────
-    JWT_SECRET: str = Field(os.getenv("JWT_SECRET"), env="JWT_SECRET")
-    JWT_ALGORITHM: str = Field("HS256", env="ALGORITHM")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
+    JWT_SECRET: str | None = Field(os.getenv("JWT_SECRET"), env="JWT_SECRET")
+    JWT_ALGORITHM: str | None = Field("HS256", env="ALGORITHM")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int | None = Field(
         60, env="ACCESS_TOKEN_EXPIRE_MINUTES"
     )
 
     # ─── CORS ─────────────────────────────────────────────────────────────────
-    BACKEND_CORS_ORIGINS: str = Field(os.getenv("BACKEND_CORS_ORIGINS"), env="BACKEND_CORS_ORIGINS")
+    BACKEND_CORS_ORIGINS: str | None = Field(os.getenv("BACKEND_CORS_ORIGINS"), env="BACKEND_CORS_ORIGINS")
 
     # ─── Logging ───────────────────────────────────────────────────────────────
-    LOG_LEVEL: str = Field(os.getenv("LOG_LEVEL"), env="LOG_LEVEL")
+    LOG_LEVEL: str | None = Field(os.getenv("LOG_LEVEL"), env="LOG_LEVEL")
 
     # ─── Pydantic-Settings Config ─────────────────────────────────────────────
-    model_config = ConfigDict(
+    model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore",
+        extra="ignore"
     )
 
     def get_cors_origins(self) -> list[str]:
