@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = Field("0.1.0", env="APP_VERSION")
     ENVIRONMENT: str = Field("development", env="ENVIRONMENT")
     PORT: int = Field(8080, env="PORT")
-    API_V1_STR: str = Field("/api/v0", env="API_V1_STR")
+    API_V1_STR: str = Field("/api/v0", env="API_VERSION")
 
     # ─── Supabase ─────────────────────────────────────────────────────────────
     SUPABASE_URL: str | None = Field(os.getenv("SUPABASE_URL"), env="SUPABASE_URL")
@@ -50,12 +50,13 @@ class Settings(BaseSettings):
     # ─── Logging ───────────────────────────────────────────────────────────────
     LOG_LEVEL: str | None = Field(os.getenv("LOG_LEVEL"), env="LOG_LEVEL")
 
-    # ─── Pydantic-Settings Config ─────────────────────────────────────────────
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore"
-    )
+    class Config:
+        """
+        Pydantic-Settings configuration.
+        """
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        extra = "ignore"
 
     def get_cors_origins(self) -> list[str]:
         """
@@ -74,6 +75,6 @@ settings = Settings()
 # Initialize Supabase client
 supabase: Client = create_client(
     supabase_url=str(settings.SUPABASE_URL),
-    supabase_key=settings.SUPABASE_KEY,
+    supabase_key=str(settings.SUPABASE_KEY),
 )
 

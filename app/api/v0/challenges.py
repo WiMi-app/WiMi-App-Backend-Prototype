@@ -220,7 +220,7 @@ async def update_challenge(
         if current_background_photo and isinstance(current_background_photo, list) and len(current_background_photo) == 2:
             if new_background_photo != current_background_photo:
                 try:
-                    delete_file(bucket_name=current_background_photo[0], file_path=current_background_photo[1])
+                    delete_file(bucket=current_background_photo[0], file_path=current_background_photo[1])
                 except Exception as e_del:
                     print(f"Failed to delete old background photo {current_background_photo}: {e_del}")
     
@@ -276,7 +276,7 @@ async def delete_challenge(challenge_id: str, user=Depends(get_current_user), su
         background_photo_to_delete = challenge_to_delete.get("background_photo")
         if background_photo_to_delete and isinstance(background_photo_to_delete, list) and len(background_photo_to_delete) == 2:
             try:
-                delete_file(bucket_name=background_photo_to_delete[0], file_path=background_photo_to_delete[1])
+                delete_file(bucket=background_photo_to_delete[0], file_path=background_photo_to_delete[1])
             except Exception as e_del:
                 print(f"Failed to delete background photo {background_photo_to_delete} for challenge {challenge_id}: {e_del}")
         
@@ -470,11 +470,11 @@ async def upload_challenge_background_photo(
     old_background_photo = challenge_resp.data.get("background_photo")
     if old_background_photo and isinstance(old_background_photo, list) and len(old_background_photo) == 2:
         try:
-            delete_file(bucket_name=old_background_photo[0], file_path=old_background_photo[1])
+            delete_file(bucket=old_background_photo[0], file_path=old_background_photo[1])
         except Exception as e:
             print(f"Failed to delete old background photo {old_background_photo}: {str(e)}")
 
-    uploaded_filename = await upload_file("background_photo", file, f"challenge_{challenge_id}_{user.id}")
+    uploaded_filename = await upload_file("challenges", file, f"challenge_{challenge_id}_{user.id}")
     new_photo_data = ["background_photo", uploaded_filename]
 
     updated_at = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
@@ -580,7 +580,7 @@ async def upload_post_media_base64(
     except Exception as e:
         for fname in uploaded_filenames_for_cleanup:
             try:
-                delete_file("media_urls", fname)
+                delete_file("post_media", fname)
             except Exception:
                 pass
         raise HTTPException(status_code=400, detail=f"Failed to upload media: {str(e)}")
